@@ -1,0 +1,399 @@
+/* Темная тема для RanobeLIB Downloader */
+
+/* Основные стили для всего приложения */
+QWidget {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+/* Стили для кнопок */
+QPushButton {
+    background-color: #3a3a3a;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    padding: 5px 10px;
+    color: #e0e0e0;
+}
+
+QPushButton:hover {
+    background-color: #4a4a4a;
+    border-color: #666666;
+}
+
+QPushButton:pressed {
+    background-color: #2a2a2a;
+}
+
+QPushButton:disabled {
+    background-color: #353535;
+    color: #707070;
+    border-color: #404040;
+}
+
+/* Стили для полей ввода */
+QLineEdit {
+    background-color: #1e1e1e;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    padding: 4px;
+    color: #e0e0e0;
+    selection-background-color: #2a82da;
+}
+
+QLineEdit:focus {
+    border-color: #2a82da;
+}
+
+QLineEdit:disabled {
+    background-color: #2a2a2a;
+    color: #707070;
+}
+
+/* Стили для групп */
+QGroupBox {
+    border: 1px solid #555555;
+    border-radius: 4px;
+    margin-top: 1em;
+    padding-top: 0.7em;
+    font-weight: bold;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top center;
+    padding: 0 5px;
+}
+
+/* Стили для чекбоксов */
+QCheckBox {
+    spacing: 5px;
+}
+
+QCheckBox::indicator {
+    width: 13px;
+    height: 13px;
+    border: 1px solid #555555;
+    border-radius: 3px;
+    background-color: #1e1e1e;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #2a82da;
+    border-color: #2a82da;
+}
+
+QCheckBox::indicator:hover {
+    border-color: #2a82da;
+}
+
+QCheckBox::indicator:disabled {
+    background-color: #353535;
+    border-color: #404040;
+}
+
+QCheckBox::indicator:checked:disabled {
+    background-color: #707070;
+    border-color: #707070;
+}
+
+/* Стили для чекбоксов команд-переводчиков */
+QCheckBox[translator="true"] {
+    margin-left: 15px;
+    font-style: italic;
+}
+
+/* Стили для вкладок */
+QTabWidget::pane {
+    border: 1px solid #555555;
+    border-radius: 4px;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background-color: #3a3a3a;
+    border: 1px solid #555555;
+    border-bottom-color: #555555;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    padding: 6px 12px;
+    min-width: 80px;
+}
+
+QTabBar::tab:selected {
+    background-color: #2d2d2d;
+    border-bottom-color: #2d2d2d;
+}
+
+/* Стили для полосы прокрутки */
+QScrollBar:vertical {
+    border: none;
+    background-color: #2d2d2d;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #5a5a5a;
+    min-height: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #6a6a6a;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+    background: none;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background-color: #2d2d2d;
+    height: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: #5a5a5a;
+    min-width: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background-color: #6a6a6a;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+    background: none;
+}
+
+/* Стили для меню */
+QMenuBar {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+QMenuBar::item {
+    background: transparent;
+    padding: 4px 10px;
+}
+
+QMenuBar::item:selected {
+    background-color: #3a3a3a;
+    border-radius: 4px;
+}
+
+QMenu {
+    background-color: #2d2d2d;
+    border: 1px solid #555555;
+    border-radius: 4px;
+}
+
+QMenu::item {
+    padding: 5px 30px 5px 20px;
+}
+
+QMenu::item:selected {
+    background-color: #3a3a3a;
+}
+
+/* Стили для меню авторизации */
+QMenu#authMenu {
+    border-radius: 6px;
+    border: 1px solid #555555;
+    padding: 5px;
+}
+
+QMenu#authMenu::item {
+    padding: 0; /* Убираем стандартные отступы для QWidgetAction */
+}
+
+QMenu#authMenu::separator {
+    height: 1px;
+    background: #555555;
+    margin: 5px 0px;
+}
+
+/* Стили для строки состояния */
+QStatusBar {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+/* Стили для панели инструментов */
+QToolBar {
+    background-color: #2d2d2d;
+    spacing: 2px;
+}
+
+/* Стили для дерева */
+QTreeView {
+    background-color: #2a2a2a;
+    alternate-background-color: #353535;
+    border: 1px solid #555555;
+    border-radius: 4px;
+}
+
+QTreeView::item {
+    height: 25px;
+    color: #e0e0e0;
+}
+
+QTreeView::item:selected {
+    background-color: #314d68;
+    color: #ffffff;
+}
+
+QHeaderView::section {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    padding: 4px;
+    border: 1px solid #555555;
+}
+
+/* Стили для текстовых полей */
+QTextEdit {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    selection-background-color: #2a82da;
+}
+
+/* Стили для прогресс-бара */
+QProgressBar {
+    border: 1px solid #555555;
+    border-radius: 4px;
+    text-align: center;
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    padding: 1px;
+}
+
+QProgressBar::chunk {
+    background-color: #2a82da;
+    border-radius: 3px;
+}
+
+/* Специальные стили для кнопки скачивания */
+#downloadButton {
+    background-color: #2a82da;
+    color: white;
+    font-weight: bold;
+    border-radius: 5px;
+    padding: 8px 16px;
+}
+
+#downloadButton:hover {
+    background-color: #3a92ea;
+}
+
+#downloadButton:disabled {
+    background-color: #555555;
+}
+
+/* Стили для метки обложки */
+#coverLabel {
+    border: 1px solid #555555;
+    background-color: #1e1e1e;
+}
+
+/* Стили для диалогов */
+QDialog {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+/* Стили для комбо-бокса */
+QComboBox {
+    border: 1px solid #555555;
+    border-radius: 4px;
+    padding: 4px 10px;
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    min-width: 6em;
+}
+
+QComboBox:hover {
+    border-color: #2a82da;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: 1px solid #555555;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+QComboBox QAbstractItemView {
+    border: 1px solid #555555;
+    background-color: #2d2d2d;
+    selection-background-color: #2a82da;
+} 
+
+/* Стили для рамки контента */
+QFrame#contentFrame {
+    border: 1px solid #555555;
+    border-radius: 4px;
+} 
+
+/* Стили для разделителя */
+QSplitter::handle {
+    border: none;
+}
+
+QSplitter::handle:horizontal {
+    width: 2px;
+}
+
+QSplitter::handle:vertical {
+    height: 2px;
+}
+
+QSplitter::handle:hover {
+    background-color: #2a82da;
+} 
+
+/* Стили для информационной панели новеллы */
+#novelTitleLabel {
+    color: #e0e0e0;
+}
+
+#novelInfoIcon {
+    font-size: 14px;
+    color: #a0a0a0;
+}
+
+#novelInfoIcon:hover {
+    color: #2a82da;
+}
+
+/* Стили для QScrollArea внутри виджета фильтров, чтобы избежать тонких линий */
+QScrollArea {
+    background: transparent;
+    border: none;
+} 
+
+QAbstractScrollArea::corner {
+    background: transparent;
+    border: none;
+} 
+
+/* Стили для маленьких иконок-кнопок управления главами */
+QPushButton#selectAllButton,
+QPushButton#selectDefaultButton,
+QPushButton#deselectAllButton {
+    border: none;
+    background-color: transparent;
+}
+
+QPushButton#selectAllButton:pressed,
+QPushButton#selectDefaultButton:pressed,
+QPushButton#deselectAllButton:pressed {
+    padding-top: 3px;       /* смещение вниз */
+    padding-bottom: 1px;    /* компенсируем высоту */
+} 

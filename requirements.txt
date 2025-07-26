@@ -1,0 +1,8 @@
+beautifulsoup4
+ebooklib
+lxml
+Pillow
+PyQt6
+pywebview
+requests
+tqdm 
