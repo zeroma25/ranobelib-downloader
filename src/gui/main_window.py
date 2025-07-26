@@ -266,7 +266,7 @@ class MainWindow(QMainWindow):
             "О программе",
             f"<h3>RanobeLIB Downloader v{__version__}</h3>"
             "<p>Программа для скачивания новелл с сайта RanobeLIB.</p>"
-            "<p><a href='https://github.com/'>GitHub</a></p>"
+            "<p><a href='https://github.com/zeroma25/ranobelib-downloader'>GitHub</a></p>"
         )
     
     def _load_novel(self):
