@@ -21,7 +21,9 @@ class RanobeLibAPI:
         self.site_url = "https://ranobelib.me"
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Origin': self.site_url,
+            'Referer': f"{self.site_url}/"
         })
         self.request_timestamps: Deque[float] = deque()
         self.token_refresh_callback: Optional[Callable[[], bool]] = None
@@ -34,10 +36,7 @@ class RanobeLibAPI:
         """Установка токена для авторизованных запросов."""
         token = token.strip()
         if token:
-            # Дополняем заголовки токеном и обязательными полями
             self.session.headers["Authorization"] = f"Bearer {token}"
-            self.session.headers.setdefault("Origin", self.site_url)
-            self.session.headers.setdefault("Referer", f"{self.site_url}/")
     
     def clear_token(self) -> None:
         """Очистка токена из заголовков сессии."""

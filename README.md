@@ -92,4 +92,4 @@ python cli.py
 
 ## Лицензия
 
-MIT License.
+MIT License

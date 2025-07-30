@@ -115,8 +115,6 @@ class RanobeLibAuth:
             "refresh_token": refresh_token_str,
         }
         headers = dict(self.api.session.headers)
-        headers.setdefault("Origin", self.api.site_url)
-        headers.setdefault("Referer", f"{self.api.site_url}/")
 
         try:
             response = self.api.session.post(token_url, json=payload, headers=headers, timeout=10)
@@ -223,8 +221,6 @@ class RanobeLibAuth:
             "code": code,
         }
         headers = dict(self.api.session.headers)
-        headers.setdefault("Origin", self.api.site_url)
-        headers.setdefault("Referer", f"{self.api.site_url}/")
 
         try:
             response = self.api.session.post(token_url, json=payload, headers=headers, timeout=10)
