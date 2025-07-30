@@ -51,7 +51,6 @@ class ImageHandler:
 
         processed_path = self._convert_and_resize(temp_path)
 
-        # Дедупликация
         if deduplicate:
             file_hash = self._get_file_hash(processed_path)
             if file_hash and file_hash in self.hash_to_filename:
@@ -59,7 +58,6 @@ class ImageHandler:
                     os.remove(processed_path)
                 return self.hash_to_filename[file_hash]
 
-        # Определение имени и переименование
         if filename:
             _, ext = os.path.splitext(processed_path)
             final_name = f"{filename}{ext}"
@@ -85,7 +83,7 @@ class ImageHandler:
             self.hash_to_filename[file_hash] = final_name
 
         return final_name
-    
+
     def _fetch_image(self, url: str) -> Tuple[bytes, Optional[str]]:
         """Скачивание содержимого изображения и его Content-Type."""
         if url.startswith("/"):
@@ -99,8 +97,12 @@ class ImageHandler:
     def _get_extension_from_content_type(self, content_type: Optional[str]) -> str:
         """Определение расширения файла на основе MIME-типа."""
         ext_map = {
-            "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
-            "image/gif": ".gif", "image/webp": ".webp", "image/bmp": ".bmp",
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+            "image/bmp": ".bmp",
             "image/svg+xml": ".svg",
         }
         if content_type is None:
@@ -109,7 +111,6 @@ class ImageHandler:
 
     def _convert_and_resize(self, filepath: str) -> str:
         """Конвертация webp/bmp в jpg и изменение размера больших изображений."""
-        # Конвертация
         filename, ext = os.path.splitext(os.path.basename(filepath))
         if ext.lower() in [".webp", ".bmp"]:
             try:
@@ -123,7 +124,6 @@ class ImageHandler:
             except Exception as e:
                 print(f"\n⚠️ Не удалось конвертировать {filepath} в JPG: {e}")
 
-        # Изменение размера
         try:
             with Image.open(filepath) as img:
                 width, height = img.size

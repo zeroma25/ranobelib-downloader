@@ -4,11 +4,11 @@ RanobeLIB API - модуль для скачивания новелл с сай�
 
 from .api import RanobeLibAPI
 from .auth import RanobeLibAuth
-from .processing import ContentProcessor
 from .branches import get_branch_info_for_display, get_formatted_branches_with_teams
-from .creators import EpubCreator, Fb2Creator, TxtCreator, HtmlCreator
+from .creators import EpubCreator, Fb2Creator, HtmlCreator, TxtCreator
 from .img import ImageHandler
 from .parser import RanobeLibParser
+from .processing import ContentProcessor
 from .settings import Settings, settings
 
 __version__ = "0.1"
@@ -17,7 +17,8 @@ __all__ = [
     "ContentProcessor",
     "EpubCreator",
     "Fb2Creator",
-    "TxtCreator",
+    "get_branch_info_for_display",
+    "get_formatted_branches_with_teams",
     "HtmlCreator",
     "ImageHandler",
     "RanobeLibAPI",
@@ -25,6 +26,5 @@ __all__ = [
     "RanobeLibParser",
     "Settings",
     "settings",
-    "get_branch_info_for_display",
-    "get_formatted_branches_with_teams",
+    "TxtCreator",
 ] 

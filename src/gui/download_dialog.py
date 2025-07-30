@@ -4,32 +4,38 @@
 
 import os
 import shutil
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List
 
-from bs4 import BeautifulSoup
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl
+from PyQt6.QtCore import QThread, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar,
-    QTextEdit, QGroupBox
+    QDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
 )
 
 from ..api import RanobeLibAPI
+from ..creators import EpubCreator, Fb2Creator, HtmlCreator, TxtCreator
 from ..img import ImageHandler
 from ..parser import RanobeLibParser
-from ..creators import EpubCreator, Fb2Creator, HtmlCreator, TxtCreator
 from ..processing import ContentProcessor
-from ..settings import settings, USER_DATA_DIR
+from ..settings import USER_DATA_DIR
 
 
 class DownloadWorker(QThread):
     """Рабочий поток для скачивания глав и создания книг"""
-    progress_update = pyqtSignal(str, int)  # сообщение, процент выполнения
-    chapter_download = pyqtSignal(int, int)  # текущая глава, всего глав
-    format_progress = pyqtSignal(str, int, int)  # формат, текущий, всего
-    finished = pyqtSignal(list)  # список созданных файлов
-    error = pyqtSignal(str)  # сообщение об ошибке
-    
+
+    progress_update = pyqtSignal(str, int)
+    chapter_download = pyqtSignal(int, int)
+    format_progress = pyqtSignal(str, int, int)
+    finished = pyqtSignal(list)
+    error = pyqtSignal(str)
+
     def __init__(
         self,
         novel_info: Dict[str, Any],
@@ -39,7 +45,7 @@ class DownloadWorker(QThread):
         parser: RanobeLibParser,
         image_handler: ImageHandler,
         save_dir: str,
-        options: Dict[str, bool]
+        options: Dict[str, bool],
     ):
         super().__init__()
         self.novel_info = novel_info
@@ -52,11 +58,10 @@ class DownloadWorker(QThread):
         self.options = options
         self.is_cancelled = False
         self._temp_dir = ""
-        
-        # Список для хранения готовых глав
+
         self.prepared_chapters = []
         self.created_files = []
-    
+
     def cancel(self):
         """Сигнал потоку на остановку."""
         if not self.is_cancelled:
@@ -66,16 +71,16 @@ class DownloadWorker(QThread):
     def run(self):
         """Запуск процесса скачивания и создания книг"""
         self.image_handler.reset()
-        
+
         novel_id = self.novel_info.get("id")
         self._temp_dir = os.path.join(USER_DATA_DIR, "temp", f"images_{novel_id}")
-        
+
         should_emit_finish = True
         try:
             os.makedirs(self._temp_dir, exist_ok=True)
-            
+
             self._download_chapters()
-            
+
             if not self.is_cancelled:
                 self._create_books()
 
@@ -92,70 +97,64 @@ class DownloadWorker(QThread):
         """Скачивание выбранных глав"""
         total_chapters = len(self.selected_chapters)
         self.progress_update.emit("Подготовка к загрузке глав...", 0)
-        
-        # Создаем экземпляр ContentProcessor для обработки глав
+
         processor = ContentProcessor(self.api, self.parser, self.image_handler)
-        
-        # Применяем настройки из модуля settings, но приоритет отдаем локальным настройкам
         processor.update_settings()
-        
-        # Настраиваем опции для обработчика (локальные настройки имеют приоритет)
-        processor.download_cover_enabled = self.options.get("download_cover", processor.download_cover_enabled)
-        processor.download_images_enabled = self.options.get("download_images", processor.download_images_enabled)
+
+        processor.download_cover_enabled = self.options.get(
+            "download_cover", processor.download_cover_enabled
+        )
+        processor.download_images_enabled = self.options.get(
+            "download_images", processor.download_images_enabled
+        )
         processor.group_by_volumes = self.options.get("group_by_volumes", processor.group_by_volumes)
         processor.add_translator = self.options.get("add_translator", processor.add_translator)
-        
+
         for i, chapter_data in enumerate(self.selected_chapters):
             if self.is_cancelled:
                 return
 
             chapter_info = chapter_data["chapter"]
             branch_ids = chapter_data["branch_ids"]
-            
-            # Выбираем первый ID ветки для скачивания
             branch_id = branch_ids[0] if branch_ids else "0"
-            
-            # Находим полную информацию о ветке
             branch_info = next(
-                (b for b in chapter_info.get("branches", []) 
-                 if str(b.get("branch_id", "0")) == str(branch_id)), 
-                {"branch_id": branch_id}
+                (
+                    b
+                    for b in chapter_info.get("branches", [])
+                    if str(b.get("branch_id", "0")) == str(branch_id)
+                ),
+                {"branch_id": branch_id},
             )
 
-            # Обновляем прогресс
             self.chapter_download.emit(i + 1, total_chapters)
             chapter_title = f"Глава {chapter_info.get('number', '?')}"
             if chapter_info.get("name"):
                 chapter_title += f" - {chapter_info.get('name')}"
-            
-            self.progress_update.emit(f"Загрузка {chapter_title}...", int(100 * (i / total_chapters)))
-            
-            # Обработка главы
-            volume = str(chapter_info.get("volume", "0"))
-            number = str(chapter_info.get("number", "0"))
-            
-            # Здесь мы используем внутренний метод ContentProcessor для обработки главы
+
+            self.progress_update.emit(
+                f"Загрузка {chapter_title}...", int(100 * (i / total_chapters))
+            )
+
             prepared_chapter = processor._process_single_chapter(
                 {"chapter": chapter_info, "branch": branch_info},
                 self.novel_info,
                 self._temp_dir,
-                total_chapters - (i + 1)
+                total_chapters - (i + 1),
             )
-            
+
             self.prepared_chapters.append(prepared_chapter)
-        
+
         self.progress_update.emit("Все главы загружены", 100)
-    
+
     def _create_books(self):
         """Создание книг в выбранных форматах"""
-        # Создаем словарь форматов и их обработчиков
         creators = {
             "EPUB": EpubCreator(self.api, self.parser, self.image_handler),
             "FB2": Fb2Creator(self.api, self.parser, self.image_handler),
             "HTML": HtmlCreator(self.api, self.parser, self.image_handler),
-            "TXT": TxtCreator(self.api, self.parser, self.image_handler)
+            "TXT": TxtCreator(self.api, self.parser, self.image_handler),
         }
-        
+
         total_formats = len(self.selected_formats)
         for i, format_name in enumerate(self.selected_formats):
             if self.is_cancelled:
@@ -163,56 +162,49 @@ class DownloadWorker(QThread):
 
             self.format_progress.emit(format_name, i + 1, total_formats)
             self.progress_update.emit(f"Создание {format_name}...", 0)
-            
+
             try:
                 creator = creators.get(format_name)
                 if not creator:
                     continue
-                
-                # Обновляем настройки из модуля settings
-                if hasattr(creator, 'content_processor'):
+
+                if hasattr(creator, "content_processor"):
                     creator.content_processor.update_settings()
-                
-                # Настраиваем опции для создателя (локальные настройки имеют приоритет)
-                if hasattr(creator, 'content_processor'):
-                    # Скачивание обложки
+
+                if hasattr(creator, "content_processor"):
                     creator.content_processor.download_cover_enabled = self.options.get(
                         "download_cover", creator.content_processor.download_cover_enabled
                     )
-                    # Скачивание изображений
                     creator.content_processor.download_images_enabled = self.options.get(
                         "download_images", creator.content_processor.download_images_enabled
                     )
-                    # Группировка по томам
                     creator.content_processor.group_by_volumes = self.options.get(
                         "group_by_volumes", creator.content_processor.group_by_volumes
                     )
-                    # Добавление информации о переводчике
                     creator.content_processor.add_translator = self.options.get(
                         "add_translator", creator.content_processor.add_translator
                     )
-                
-                # Устанавливаем кэшированные подготовленные главы
+
                 ContentProcessor._global_cache = {
                     (self.novel_info.get("id"), None): self.prepared_chapters
                 }
-                
-                # Создаем книгу
+
                 filename = creator.create(self.novel_info, self.prepared_chapters, None)
-                
-                # Если указан каталог для сохранения, переносим файл туда
+
                 if self.save_dir and os.path.exists(filename):
                     new_path = os.path.join(self.save_dir, os.path.basename(filename))
                     if os.path.abspath(filename) != os.path.abspath(new_path):
                         shutil.move(filename, new_path)
                         filename = new_path
-                
+
                 self.created_files.append(filename)
-                self.progress_update.emit(f"Создан файл {format_name}: {os.path.basename(filename)}", 100)
-                
+                self.progress_update.emit(
+                    f"Создан файл {format_name}: {os.path.basename(filename)}", 100
+                )
+
             except Exception as e:
                 self.progress_update.emit(f"Ошибка при создании {format_name}: {e}", 0)
-    
+
     def _cleanup_temp_files(self):
         """Очистка временных файлов"""
         if not self._temp_dir or not os.path.exists(self._temp_dir):
@@ -224,8 +216,7 @@ class DownloadWorker(QThread):
             self.progress_update.emit("Временные файлы удалены", 100)
         except Exception as e:
             self.progress_update.emit(f"Не удалось удалить временные файлы: {e}", 0)
-        
-        # Очищаем кэш подготовленных глав, чтобы при повторном скачивании не использовались ссылки на удаленные файлы
+
         novel_id = self.novel_info.get("id")
         cache_key = (novel_id, None)
         if cache_key in ContentProcessor._global_cache:
@@ -235,7 +226,7 @@ class DownloadWorker(QThread):
 
 class DownloadDialog(QDialog):
     """Диалог для отображения прогресса загрузки"""
-    
+
     def __init__(
         self,
         novel_info: Dict[str, Any],
@@ -246,7 +237,7 @@ class DownloadDialog(QDialog):
         image_handler: ImageHandler,
         save_dir: str,
         options: Dict[str, bool],
-        parent=None
+        parent=None,
     ):
         super().__init__(parent)
         self.novel_info = novel_info
@@ -257,63 +248,59 @@ class DownloadDialog(QDialog):
         self.image_handler = image_handler
         self.save_dir = save_dir
         self.options = options
-        
+
         self.download_worker = None
         self.created_files = []
-        
+
         self._setup_ui()
         self._start_download()
-    
+
     def _setup_ui(self):
         """Настройка интерфейса диалога"""
         self.setWindowTitle("Загрузка и создание книг")
         self.setMinimumWidth(600)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
-        
+
         layout = QVBoxLayout(self)
-        
-        # Прогресс загрузки глав
+
         chapters_group = QGroupBox("Прогресс загрузки глав")
         chapters_layout = QVBoxLayout(chapters_group)
-        
+
         self.chapters_progress = QProgressBar()
         self.chapters_progress.setMinimum(0)
         self.chapters_progress.setMaximum(len(self.selected_chapters))
         self.chapters_progress.setValue(0)
         chapters_layout.addWidget(self.chapters_progress)
-        
+
         self.chapters_label = QLabel("0 из 0 глав загружено")
         chapters_layout.addWidget(self.chapters_label)
-        
+
         layout.addWidget(chapters_group)
-        
-        # Прогресс создания форматов
+
         formats_group = QGroupBox("Прогресс создания книг")
         formats_layout = QVBoxLayout(formats_group)
-        
+
         self.formats_progress = QProgressBar()
         self.formats_progress.setMinimum(0)
         self.formats_progress.setMaximum(len(self.selected_formats))
         self.formats_progress.setValue(0)
         formats_layout.addWidget(self.formats_progress)
-        
+
         self.formats_label = QLabel("0 из 0 форматов создано")
         formats_layout.addWidget(self.formats_label)
-        
+
         layout.addWidget(formats_group)
-        
-        # Лог операций
+
         log_group = QGroupBox("Лог операций")
         log_layout = QVBoxLayout(log_group)
-        
+
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setMinimumHeight(150)
         log_layout.addWidget(self.log_text)
-        
+
         layout.addWidget(log_group)
-        
-        # Кнопки управления
+
         buttons_layout = QHBoxLayout()
 
         self.open_folder_button = QPushButton("Открыть папку")
@@ -326,17 +313,15 @@ class DownloadDialog(QDialog):
         buttons_layout.addWidget(self.close_button)
 
         layout.addLayout(buttons_layout)
-    
+
     def _start_download(self):
         """Запуск процесса загрузки"""
-        # Добавляем начальное сообщение в лог
         title = self.novel_info.get("rus_name") or self.novel_info.get("eng_name", "Новелла")
         self.log_text.append(f"<b>Начало загрузки новеллы: {title}</b>")
         self.log_text.append(f"Выбрано глав: {len(self.selected_chapters)}")
         self.log_text.append(f"Выбранные форматы: {', '.join(self.selected_formats)}")
         self.log_text.append("─" * 50)
-        
-        # Создаем рабочий поток
+
         self.download_worker = DownloadWorker(
             self.novel_info,
             self.selected_chapters,
@@ -345,17 +330,15 @@ class DownloadDialog(QDialog):
             self.parser,
             self.image_handler,
             self.save_dir,
-            self.options
+            self.options,
         )
-        
-        # Подключаем сигналы
+
         self.download_worker.progress_update.connect(self._on_progress_update)
         self.download_worker.chapter_download.connect(self._on_chapter_download)
         self.download_worker.format_progress.connect(self._on_format_progress)
         self.download_worker.finished.connect(self._on_download_finished)
         self.download_worker.error.connect(self._on_download_error)
-        
-        # Запускаем поток
+
         self.download_worker.start()
 
     def _cancel_download(self):
@@ -369,47 +352,46 @@ class DownloadDialog(QDialog):
         """Перехват события закрытия окна для отмены операции."""
         if self.download_worker and self.download_worker.isRunning():
             self._cancel_download()
-            event.ignore()  # Не закрываем окно сразу, ждем завершения потока
+            event.ignore()
         else:
             event.accept()
-    
+
     def _on_progress_update(self, message: str, progress: int):
         """Обработка обновления прогресса"""
         self.log_text.append(message)
-    
+
     def _on_chapter_download(self, current: int, total: int):
         """Обработка прогресса загрузки глав"""
         self.chapters_progress.setValue(current)
         self.chapters_label.setText(f"{current} из {total} глав загружено")
-    
+
     def _on_format_progress(self, format_name: str, current: int, total: int):
         """Обработка прогресса создания форматов"""
         self.formats_progress.setValue(current)
         self.formats_label.setText(f"{current} из {total} форматов создано")
         self.log_text.append(f"<b>Создание формата {format_name}...</b>")
-    
+
     def _on_download_finished(self, created_files: List[str]):
         """Обработка завершения загрузки"""
         self.created_files = created_files
-        
+
         self.log_text.append("─" * 50)
         if self.download_worker and self.download_worker.is_cancelled:
             self.log_text.append("<b>Загрузка отменена</b>")
         else:
             self.log_text.append("<b>Загрузка завершена</b>")
-        
+
         if created_files:
             self.log_text.append("<b>Созданные файлы:</b>")
             for filename in created_files:
                 self.log_text.append(f"- {os.path.basename(filename)}")
-            # Включаем кнопку открытия папки
             self.open_folder_button.setEnabled(True)
-        
+
         self.close_button.setText("Закрыть")
         self.close_button.setEnabled(True)
         try:
             self.close_button.clicked.disconnect(self._cancel_download)
-        except TypeError: # уже отключен
+        except TypeError:
             pass
         self.close_button.clicked.connect(self.accept)
 
@@ -417,7 +399,7 @@ class DownloadDialog(QDialog):
         """Открывает каталог с загруженными файлами."""
         if os.path.isdir(self.save_dir):
             QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.abspath(self.save_dir)))
-    
+
     def _on_download_error(self, error_message: str):
         """Обработка ошибки при загрузке"""
         self.log_text.append(f"<span style='color: red;'><b>Ошибка:</b> {error_message}</span>")
@@ -425,6 +407,6 @@ class DownloadDialog(QDialog):
         self.close_button.setEnabled(True)
         try:
             self.close_button.clicked.disconnect(self._cancel_download)
-        except TypeError: # уже отключен
+        except TypeError:
             pass
         self.close_button.clicked.connect(self.accept) 

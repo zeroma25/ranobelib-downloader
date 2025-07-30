@@ -57,24 +57,21 @@ class HtmlCreator(ContentProcessor):
     ) -> str:
         """Сборка полного HTML-содержимого книги."""
         title, _, _, _ = self.extract_title_author_summary(novel_info)
-        
+
         toc_html = self._create_toc_html(novel_info, prepared_chapters)
         js_script = self._get_javascript()
 
         head = self._create_html_head(title, js_script)
-        body_content = self._create_html_body(
-            novel_info, prepared_chapters, cover_filename, toc_html
-        )
+        body_content = self._create_html_body(novel_info, prepared_chapters, cover_filename, toc_html)
 
-        # Встраиваем изображения в HTML-тело как base64
         embedded_body = self._embed_images_as_base64(body_content, image_folder)
 
-        return f"<!DOCTYPE html>\n<html lang=\"ru\">\n{head}\n{embedded_body}\n</html>"
+        return f'<!DOCTYPE html>\n<html lang="ru">\n{head}\n{embedded_body}\n</html>'
 
     def _create_html_head(self, title: str, js_script: str) -> str:
         """Создание секции <head> для HTML-документа."""
         decoded_title = self.parser.decode_html_entities(title)
-        
+
         style = """
 <style>
     :root {
@@ -106,7 +103,6 @@ class HtmlCreator(ContentProcessor):
     p { margin: 1em 0; }
     img { max-width: 100%; height: auto; display: block; margin: 1em auto; border-radius: 4px; }
     
-    /* Table of Contents */
     #toc-sidebar {
         position: fixed; top: 0; left: 0; height: 100%; width: 300px;
         background-color: var(--bg-color); border-right: 1px solid var(--border-color);
@@ -133,7 +129,7 @@ class HtmlCreator(ContentProcessor):
     .toc-volume-header {
         cursor: pointer; padding: 8px 10px; border-radius: 4px;
         position: relative; user-select: none;
-        padding-left: 25px; /* Space for arrow */
+        padding-left: 25px;
     }
     .toc-volume-header strong { font-weight: bold; }
     .toc-volume-header:hover { background-color: var(--summary-bg); }
@@ -155,7 +151,6 @@ class HtmlCreator(ContentProcessor):
     }
     #toc-overlay.open { display: block; }
 
-    /* Controls */
     #controls-wrapper {
         position: fixed; bottom: 0; right: 0;
         width: 100px; height: 120px; z-index: 1002;
@@ -187,17 +182,17 @@ class HtmlCreator(ContentProcessor):
     }
 </style>
 """
-        
+
         return (
-            '<head>\n'
+            "<head>\n"
             f'<meta charset="UTF-8">\n'
             f'<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
-            f'<title>{decoded_title}</title>\n'
-            f'{style}\n'
-            '</head>'
-            '<body>'
-            f'{js_script}'
-            '</body>'
+            f"<title>{decoded_title}</title>\n"
+            f"{style}\n"
+            "</head>"
+            "<body>"
+            f"{js_script}"
+            "</body>"
         )
 
     def _create_html_body(
@@ -209,8 +204,7 @@ class HtmlCreator(ContentProcessor):
     ) -> str:
         """Создание содержимого для <body>."""
         title, author, summary, _ = self.extract_title_author_summary(novel_info)
-        
-        # --- Controls and Sidebar ---
+
         controls = """
 <div id="controls-wrapper">
     <div id="controls">
@@ -219,11 +213,10 @@ class HtmlCreator(ContentProcessor):
     </div>
 </div>"""
         sidebar = f'<nav id="toc-sidebar">{toc_html}</nav><div id="toc-overlay"></div>'
-        
-        # --- Main Content ---
+
         body_parts = [f"<body>{controls}{sidebar}"]
 
-        body_parts.append(f"<main>")
+        body_parts.append("<main>")
         body_parts.append(f"<h1>{self.parser.decode_html_entities(title)}</h1>")
         if author:
             body_parts.append(f"<h2>{self.parser.decode_html_entities(author)}</h2>")
@@ -237,9 +230,7 @@ class HtmlCreator(ContentProcessor):
         for chapter in prepared_chapters:
             volume_chapters.setdefault(str(chapter["volume"]), []).append(chapter)
 
-        sorted_volumes = sorted(
-            volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0
-        )
+        sorted_volumes = sorted(volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0)
 
         total_volumes = self.get_total_volume_count(novel_info)
 
@@ -250,7 +241,6 @@ class HtmlCreator(ContentProcessor):
             for prep in volume_chapters[vol_num]:
                 ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
 
-                # Формируем заголовок главы в зависимости от настройки и общего количества томов
                 if total_volumes > 1 and not self.group_by_volumes and vol_num != "0":
                     chapter_title = f'Том {vol_num} Глава {prep["number"]}'
                 else:
@@ -264,53 +254,54 @@ class HtmlCreator(ContentProcessor):
                 body_parts.append(f'<h3 class="chapter-title">{chapter_title}</h3>')
                 body_parts.append(prep["html"])
                 body_parts.append("</div>")
-        
+
         body_parts.append("</main>")
         body_parts.append("</body>")
         return "\n".join(body_parts)
 
-    def _create_toc_html(self, novel_info: Dict[str, Any], prepared_chapters: List[Dict[str, Any]]) -> str:
+    def _create_toc_html(
+        self, novel_info: Dict[str, Any], prepared_chapters: List[Dict[str, Any]]
+    ) -> str:
         """Создание HTML для оглавления."""
         header = """
 <div id="toc-header">
     <svg class="back-arrow-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M9.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.2 288 416 288c17.7 0 32-14.3 32-32s-14.3-32-32-32l-306.7 0L214.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"></path></svg>
     <h2>Оглавление</h2>
 </div>"""
-        
+
         volume_chapters: Dict[str, List[Dict[str, Any]]] = {}
         for chapter in prepared_chapters:
             volume_chapters.setdefault(str(chapter["volume"]), []).append(chapter)
-        
-        sorted_volumes = sorted(
-            volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0
-        )
+
+        sorted_volumes = sorted(volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0)
 
         total_volumes = self.get_total_volume_count(novel_info)
 
         has_volumes = self.group_by_volumes and total_volumes > 1
 
-        toc_list_parts = ["<ul class=\"toc-main-list\">"]
+        toc_list_parts = ['<ul class="toc-main-list">']
         for vol_num in sorted_volumes:
             if has_volumes:
-                toc_list_parts.append(f'<li><div class="toc-volume-header open"><strong>Том {vol_num}</strong></div><ul class="toc-volume-chapters open">')
+                toc_list_parts.append(
+                    f'<li><div class="toc-volume-header open"><strong>Том {vol_num}</strong></div><ul class="toc-volume-chapters open">'
+                )
 
             for prep in volume_chapters[vol_num]:
                 ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
-                
-                # Формируем заголовок главы в зависимости от настройки и общего количества томов
+
                 if total_volumes > 1 and not self.group_by_volumes and vol_num != "0":
                     chapter_title = f'Том {vol_num} Глава {prep["number"]}'
                 else:
                     chapter_title = f'Глава {prep["number"]}'
-                    
+
                 if ch_name:
                     chapter_title += f" - {ch_name}"
-                    
+
                 chapter_id = f'ch-{prep["volume"]}-{prep["number"]}'
                 toc_list_parts.append(f'<li><a href="#{chapter_id}">{chapter_title}</a></li>')
 
             if has_volumes:
-                toc_list_parts.append('</ul></li>')
+                toc_list_parts.append("</ul></li>")
         toc_list_parts.append("</ul>")
 
         return header + "\n" + "\n".join(toc_list_parts)
@@ -330,7 +321,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const controlsWrapper = document.getElementById('controls-wrapper');
     const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-    // Theme Switcher
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') {
         body.classList.add('dark-mode');
@@ -340,7 +330,6 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('theme', body.classList.contains('dark-mode') ? 'dark' : 'light');
     });
 
-    // TOC Toggle
     const toggleTOC = () => {
         body.classList.toggle('toc-is-open');
         tocSidebar.classList.toggle('open');
@@ -351,12 +340,10 @@ document.addEventListener('DOMContentLoaded', () => {
     tocHeader.addEventListener('click', toggleTOC);
     tocSidebar.querySelectorAll('a').forEach(link => {
         link.addEventListener('click', (e) => {
-            // Close sidebar after click, but let link navigation happen
             setTimeout(toggleTOC, 100);
         });
     });
     
-    // Volume collapsing
     tocSidebar.querySelectorAll('.toc-volume-header').forEach(header => {
         header.addEventListener('click', () => {
             header.classList.toggle('open');
@@ -367,10 +354,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Controls Logic
     if (isTouch) {
         const mainContent = document.querySelector('main');
-        // On touch, toggle with a tap on the main content area, hide with a scroll.
         if (mainContent) {
             mainContent.addEventListener('click', () => {
                 controls.classList.toggle('visible');
@@ -382,8 +367,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, { passive: true });
     } else {
-        // On desktop, we use a class on the body to manage scroll state
-        // and CSS hover to manage visibility.
         let scrollTimeout;
         window.addEventListener('scroll', () => {
             body.classList.add('is-scrolling');
@@ -404,9 +387,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 continue
 
             src_attr = img["src"]
-            # Убедимся, что src - это строка, а не список
             src = str(src_attr[0] if isinstance(src_attr, list) else src_attr)
-            
+
             if src.startswith("data:"):
                 continue
 
@@ -419,6 +401,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     encoded_string = base64.b64encode(f.read()).decode("utf-8")
                 img["src"] = f"data:{mime_type};base64,{encoded_string}"
             else:
-                 print(f"⚠️ Изображение не найдено для встраивания: {image_path}")
+                print(f"⚠️ Изображение не найдено для встраивания: {image_path}")
 
         return str(soup) 

@@ -6,19 +6,16 @@ import re
 from typing import Dict
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont, QPalette, QColor
-from PyQt6.QtWidgets import (
-    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QApplication
-)
+from PyQt6.QtGui import QColor, QFont, QPalette
+from PyQt6.QtWidgets import QApplication, QStyle, QStyledItemDelegate, QStyleOptionViewItem
 
-# Пользовательские роли
 SINGLE_LINE_ITEM_ROLE = Qt.ItemDataRole.UserRole + 1
 TEAM_NAME_ROLE = Qt.ItemDataRole.UserRole + 2
 
 
 class ChapterItemDelegate(QStyledItemDelegate):
     """Делегат для отрисовки элементов глав с цветным и курсивным текстом."""
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.team_colors = {}
@@ -28,57 +25,51 @@ class ChapterItemDelegate(QStyledItemDelegate):
         self.team_colors = colors
 
     def paint(self, painter, option, index):
-        # Получаем данные из ролей
         is_single_line = index.data(SINGLE_LINE_ITEM_ROLE)
         team_name = index.data(TEAM_NAME_ROLE)
 
-        # Если нет специальной отрисовки, используем стандартную
         if not is_single_line and not team_name:
             super().paint(painter, option, index)
             return
 
-        # Подготовка к кастомной отрисовке
         options = QStyleOptionViewItem(option)
         self.initStyleOption(options, index)
-        
-        # Кастомный цвет выделения для переводчиков
+
         if options.state & QStyle.StateFlag.State_Selected:
             options.palette.setColor(QPalette.ColorRole.Highlight, QColor("#314d68"))
 
         style = options.widget.style() if options.widget else QApplication.style()
         text = options.text
-        
-        # Отрисовка фона, выделения и т.д. без текста
+
         options.text = ""
         if style:
             style.drawControl(QStyle.ControlElement.CE_ItemViewItem, options, painter)
-        
-        # Получаем цвет команды или цвет по умолчанию
+
         default_color = options.palette.color(QPalette.ColorRole.Text)
         team_color_hex = self.team_colors.get(team_name)
         team_qcolor = QColor(team_color_hex) if team_color_hex else default_color
 
-        # Получаем прямоугольник для текста
-        text_rect = style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, options, options.widget) if style else options.rect
+        text_rect = (
+            style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, options, options.widget)
+            if style
+            else options.rect
+        )
 
         if painter:
             painter.save()
             original_font = options.font
-            
+
             if is_single_line:
-                # Случай "Глава X [Команда]"
                 match = re.match(r"(.*) (\[.*\])", text) if text else None
                 if match:
                     part1, part2 = match.groups()
-                    
-                    # Часть 1: обычный текст
+
                     font = QFont(original_font)
                     font.setItalic(False)
                     painter.setFont(font)
                     painter.setPen(default_color)
                     painter.drawText(text_rect, options.displayAlignment, part1)
-                    
-                    # Часть 2: цветной курсив
+
                     part1_width = painter.fontMetrics().horizontalAdvance(part1)
                     text_rect.setLeft(text_rect.left() + part1_width)
                     font.setItalic(True)
@@ -86,17 +77,15 @@ class ChapterItemDelegate(QStyledItemDelegate):
                     painter.setPen(team_qcolor)
                     painter.drawText(text_rect, options.displayAlignment, "    " + part2)
                 else:
-                    # Фоллбек
                     painter.setFont(original_font)
                     painter.setPen(default_color)
                     painter.drawText(text_rect, options.displayAlignment, text)
-            
+
             elif team_name:
-                # Случай "[Команда]"
                 font = QFont(original_font)
                 font.setItalic(True)
                 painter.setFont(font)
                 painter.setPen(team_qcolor)
                 painter.drawText(text_rect, options.displayAlignment, text)
-                
+
             painter.restore() 

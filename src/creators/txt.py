@@ -25,18 +25,16 @@ class TxtCreator(ContentProcessor):
         selected_branch_id: Optional[str] = None,
     ) -> str:
         """Создание TXT файла с главами новеллы."""
-        # Для TXT формата изображения не нужны, но prepare_chapters может их скачивать.
-        # Мы передаем временную папку, которая потом будет очищена.
         _, image_folder = self.prepare_dirs(novel_info.get("id"))
 
         prepared_chapters = self.prepare_chapters(
             novel_info, chapters_data, selected_branch_id, image_folder
         )
-        
+
         print(f"📦 Создание {self.format_name}...")
 
         full_text = self._build_text_content(novel_info, prepared_chapters)
-        
+
         title, _, _, _ = self.extract_title_author_summary(novel_info)
         txt_filename = self.get_safe_filename(title, "txt")
 
@@ -45,9 +43,7 @@ class TxtCreator(ContentProcessor):
 
         return txt_filename
 
-    def _build_text_content(
-        self, novel_info: Dict[str, Any], prepared_chapters: List[Dict[str, Any]]
-    ) -> str:
+    def _build_text_content(self, novel_info: Dict[str, Any], prepared_chapters: List[Dict[str, Any]]) -> str:
         """Сборка текстового содержимого книги."""
         title, author, _, _ = self.extract_title_author_summary(novel_info)
 
@@ -60,9 +56,7 @@ class TxtCreator(ContentProcessor):
         for chapter in prepared_chapters:
             volume_chapters.setdefault(str(chapter["volume"]), []).append(chapter)
 
-        sorted_volumes = sorted(
-            volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0
-        )
+        sorted_volumes = sorted(volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0)
 
         total_volumes = self.get_total_volume_count(novel_info)
 
@@ -76,18 +70,17 @@ class TxtCreator(ContentProcessor):
 
         return "\n".join(lines)
 
-    def _format_chapter_to_text(self, prepared_chapter: Dict[str, Any], volume: str, total_volumes: int) -> str:
+    def _format_chapter_to_text(
+        self, prepared_chapter: Dict[str, Any], volume: str, total_volumes: int
+    ) -> str:
         """Форматирование одной главы в текстовый блок."""
-        ch_name = self.parser.decode_html_entities(
-            prepared_chapter.get("name", "").strip()
-        )
-        
-        # Формируем заголовок главы в зависимости от настройки и общего количества томов
+        ch_name = self.parser.decode_html_entities(prepared_chapter.get("name", "").strip())
+
         if total_volumes > 1 and not self.group_by_volumes and volume != "0":
             chapter_title = f'Том {volume} Глава {prepared_chapter["number"]}'
         else:
             chapter_title = f'Глава {prepared_chapter["number"]}'
-            
+
         if ch_name:
             chapter_title += f" - {ch_name}"
 
@@ -102,17 +95,13 @@ class TxtCreator(ContentProcessor):
             return ""
         soup = BeautifulSoup(html, "html.parser")
 
-        # Удаляем теги img, так как они не нужны в txt
         for img in soup.find_all("img"):
             img.decompose()
 
-        # get_text с separator='\n' хорошо обрабатывает блочные теги
         text = soup.get_text(separator="\n")
 
-        # Очистка текста от лишних пустых строк
         lines = [line.strip() for line in text.splitlines()]
         non_empty_lines = [line for line in lines if line]
         clean_text = "\n".join(non_empty_lines)
-        
-        # Заменяем множественные переносы на один двойной
-        return re.sub(r'\n{3,}', '\n\n', clean_text) 
+
+        return re.sub(r"\n{3,}", "\n\n", clean_text) 

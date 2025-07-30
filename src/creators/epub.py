@@ -4,22 +4,24 @@
 
 import os
 import re
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 from ebooklib import epub
-from typing import Dict, List, Any, Optional, Tuple, Set
 
 from ..processing import ContentProcessor
 
+
 class EpubCreator(ContentProcessor):
     """Класс для создания EPUB-файлов"""
-    
+
     def __init__(self, api, parser, image_handler):
         super().__init__(api, parser, image_handler)
-    
+
     @property
     def format_name(self) -> str:
         """Возвращает имя формата книги."""
         return "EPUB"
-    
+
     def create(
         self,
         novel_info: Dict[str, Any],
@@ -30,26 +32,21 @@ class EpubCreator(ContentProcessor):
         book = epub.EpubBook()
         _, image_folder = self.prepare_dirs(novel_info.get("id"))
 
-        # 1. Метаданные
         self._set_metadata(book, novel_info)
 
-        # 2. Обложка
         spine, toc = [], []
         cover_item = self._create_cover(book, novel_info, image_folder)
         if cover_item:
             spine.append(cover_item)
 
-        # 3. Главы и оглавление
         chapter_spine, chapter_toc, referenced_images = self._add_chapters_and_toc(
             book, novel_info, chapters_data, selected_branch_id, image_folder
         )
         spine.extend(chapter_spine)
         toc.extend(chapter_toc)
 
-        # 4. Изображения
         self._add_images(book, image_folder, referenced_images)
 
-        # 5. Сборка и сохранение
         book.toc = toc
         book.spine = spine
         book.add_item(epub.EpubNcx())
@@ -58,9 +55,9 @@ class EpubCreator(ContentProcessor):
         epub_filename = self.get_safe_filename(title, "epub")
 
         epub.write_epub(epub_filename, book, {})
-        
+
         return epub_filename
-    
+
     def _set_metadata(self, book: epub.EpubBook, novel_info: Dict[str, Any]):
         """Установка метаданных для EPUB книги."""
         title, author, summary, genres = self.extract_title_author_summary(novel_info)
@@ -76,7 +73,9 @@ class EpubCreator(ContentProcessor):
         if year_str:
             book.add_metadata("DC", "date", year_str)
 
-    def _create_cover(self, book: epub.EpubBook, novel_info: Dict[str, Any], image_folder: str) -> Optional[epub.EpubItem]:
+    def _create_cover(
+        self, book: epub.EpubBook, novel_info: Dict[str, Any], image_folder: str
+    ) -> Optional[epub.EpubItem]:
         """Скачивание и создание страницы с обложкой."""
         cover_path = self.download_cover(novel_info, image_folder)
         if not cover_path:
@@ -98,7 +97,9 @@ class EpubCreator(ContentProcessor):
   <body style="margin: 0; padding: 0;">
     <img src="images/cover{ext}" style="width: 100%; height: auto;" alt="Cover" />
   </body>
-</html>""".encode("utf-8"),
+</html>""".encode(
+                "utf-8"
+            ),
         )
         book.add_item(cover_item)
         return cover_item
@@ -121,7 +122,6 @@ class EpubCreator(ContentProcessor):
             novel_info, chapters_data, selected_branch_id, image_folder
         )
 
-        # Определяем общее количество томов во всей новелле
         total_volumes = self.get_total_volume_count(novel_info)
 
         print("📦 Создание EPUB...")
@@ -129,7 +129,6 @@ class EpubCreator(ContentProcessor):
             ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
             vol_num = str(prep["volume"])
 
-            # Формируем заголовок главы в зависимости от настроек и общего количества томов
             if total_volumes > 1 and not self.group_by_volumes and vol_num != "0":
                 chapter_title = f'Том {vol_num} Глава {prep["number"]}'
             else:
@@ -147,16 +146,13 @@ class EpubCreator(ContentProcessor):
             volume_chapters.setdefault(vol_num, []).append(chapter)
             spine.append(chapter)
 
-            # Собираем все изображения, упоминаемые в HTML главы
             for img_filename in re.findall(r"src=['\"]images/([^'\"]+)['\"]", prep["html"]):
                 referenced_images.add(img_filename)
 
-        # Формируем TOC
         if self.group_by_volumes and total_volumes > 1 and volume_chapters:
             for vol_num in sorted(volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0):
                 toc.append((epub.Section(f"Том {vol_num}"), tuple(volume_chapters[vol_num])))
         elif volume_chapters:
-            # Если группировка отключена или во всей новелле только один том – добавляем главы напрямую
             all_chapters = []
             for vol_num in sorted(volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0):
                 all_chapters.extend(volume_chapters[vol_num])
@@ -170,7 +166,6 @@ class EpubCreator(ContentProcessor):
             return
 
         for filename in referenced_images:
-            # Обложка уже добавлена через set_cover
             if filename.startswith("cover."):
                 continue
 

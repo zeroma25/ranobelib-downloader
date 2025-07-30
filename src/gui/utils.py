@@ -3,7 +3,7 @@
 """
 
 import os
-from typing import Optional, Callable, Any
+from typing import Callable, Optional
 
 from PyQt6.QtCore import QObject
 from PyQt6.QtGui import QAction, QIcon
@@ -27,7 +27,7 @@ def create_action(
     icon: Optional[QIcon] = None,
     tip: Optional[str] = None,
     checkable: bool = False,
-    signal: str = "triggered"
+    signal: str = "triggered",
 ) -> QAction:
     """Создание QAction с заданными параметрами"""
     action = QAction(text, parent)

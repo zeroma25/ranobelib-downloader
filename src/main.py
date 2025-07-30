@@ -5,31 +5,34 @@
 import os
 import shutil
 import sys
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 from . import __version__
 from .api import RanobeLibAPI
 from .auth import RanobeLibAuth
-from .branches import get_branch_info_for_display, get_formatted_branches_with_teams, get_unique_chapters_count
-from .creators import EpubCreator, Fb2Creator, TxtCreator, HtmlCreator
+from .branches import (
+    get_branch_info_for_display,
+    get_formatted_branches_with_teams,
+    get_unique_chapters_count,
+)
+from .creators import EpubCreator, Fb2Creator, HtmlCreator, TxtCreator
 from .img import ImageHandler
 from .parser import RanobeLibParser
-from .settings import settings, USER_DATA_DIR
+from .settings import USER_DATA_DIR, settings
 
 
 def main(use_gui: bool = False):
     """Основная функция программы."""
-    # Если запрошен GUI, запускаем его
     if use_gui:
         try:
             from .gui.app import run_gui
+
             return run_gui()
         except ImportError as e:
             print(f"⚠️ Ошибка запуска графического интерфейса: {e}")
             print("ℹ️ Запускаю консольную версию...")
             return run_cli()
-    
-    # Иначе запускаем CLI версию
+
     return run_cli()
 
 
@@ -41,7 +44,6 @@ def run_cli():
     image_handler = ImageHandler(api)
     api.set_token_refresh_callback(auth.refresh_token)
 
-    # Регистрация "создателей"
     creators = [
         EpubCreator(api, parser, image_handler),
         Fb2Creator(api, parser, image_handler),
@@ -53,10 +55,8 @@ def run_cli():
     _handle_authentication(auth)
     print("─" * 60)
 
-    # Показываем текущие настройки
     _show_settings()
 
-    # Предлагаем изменить настройки
     if _ask_change_settings():
         _change_settings()
     print("─" * 60)
@@ -66,7 +66,9 @@ def run_cli():
     print("🔄 Получение информации о новелле...")
     novel_info = api.get_novel_info(slug)
     if not novel_info.get("id"):
-        print("❌ Не удалось загрузить информацию о новелле. Возможно, ссылка некорректна или требуется авторизация.")
+        print(
+            "❌ Не удалось загрузить информацию о новелле. Возможно, ссылка некорректна или требуется авторизация."
+        )
         return
 
     title = novel_info.get("rus_name") or novel_info.get("eng_name") or "Без названия"
@@ -152,23 +154,39 @@ def _ask_change_settings():
 def _change_settings():
     """Изменение настроек пользователем."""
     print("⚙️ Изменение настроек:")
-    
-    choice = input(f"  Скачивать обложку? (y/n) [{('y' if settings.get('download_cover') else 'n')}]: ").strip().lower()
+
+    choice = (
+        input(f"  Скачивать обложку? (y/n) [{('y' if settings.get('download_cover') else 'n')}]: ")
+        .strip()
+        .lower()
+    )
     if choice:
         settings.set("download_cover", choice in {"y", "yes", "да", "д", "1"})
-    
-    choice = input(f"  Скачивать изображения из глав? (y/n) [{('y' if settings.get('download_images') else 'n')}]: ").strip().lower()
+
+    choice = (
+        input(f"  Скачивать изображения из глав? (y/n) [{('y' if settings.get('download_images') else 'n')}]: ")
+        .strip()
+        .lower()
+    )
     if choice:
         settings.set("download_images", choice in {"y", "yes", "да", "д", "1"})
-    
-    choice = input(f"  Добавлять данные о переводчике? (y/n) [{('y' if settings.get('add_translator') else 'n')}]: ").strip().lower()
+
+    choice = (
+        input(f"  Добавлять данные о переводчике? (y/n) [{('y' if settings.get('add_translator') else 'n')}]: ")
+        .strip()
+        .lower()
+    )
     if choice:
         settings.set("add_translator", choice in {"y", "yes", "да", "д", "1"})
-    
-    choice = input(f"  Группировать главы по томам? (y/n) [{('y' if settings.get('group_by_volumes') else 'n')}]: ").strip().lower()
+
+    choice = (
+        input(f"  Группировать главы по томам? (y/n) [{('y' if settings.get('group_by_volumes') else 'n')}]: ")
+        .strip()
+        .lower()
+    )
     if choice:
         settings.set("group_by_volumes", choice in {"y", "yes", "да", "д", "1"})
-    
+
     current_dir = settings.get("save_directory")
     new_dir = input(f"  Каталог для сохранения [{current_dir}]: ").strip()
     if new_dir:
@@ -180,7 +198,7 @@ def _change_settings():
                 print(f"❌ Не удалось создать каталог: {e}")
                 new_dir = current_dir
         settings.set("save_directory", os.path.abspath(new_dir))
-    
+
     print("✅ Настройки сохранены")
 
 
@@ -208,24 +226,18 @@ def _select_branch(branches: Dict, chapters_data: List[Dict[str, Any]]) -> Optio
     print("─" * 60)
     print("📊 Доступные переводы:")
 
-    # Формируем список для отображения
     display_options = []
 
-    # 1. Опция "По умолчанию"
     default_option = (
         "default",
         f"По умолчанию [Автовыбор] ({get_unique_chapters_count(chapters_data)} глав)",
     )
     display_options.append(default_option)
 
-    # 2. Остальные ветки, отсортированные по количеству глав
-    sorted_branches = sorted(
-        branches.items(), key=lambda x: x[1]["chapter_count"], reverse=True
-    )
+    sorted_branches = sorted(branches.items(), key=lambda x: x[1]["chapter_count"], reverse=True)
     for branch_id, branch_info in sorted_branches:
         display_options.append((branch_id, get_branch_info_for_display(branch_info)))
 
-    # Выводим все опции
     for i, (_, display_str) in enumerate(display_options):
         print(f"  {i+1}. {display_str}")
 
@@ -233,7 +245,6 @@ def _select_branch(branches: Dict, chapters_data: List[Dict[str, Any]]) -> Optio
         try:
             choice = int(input("📑 Выберите перевод (номер): "))
             if 1 <= choice <= len(display_options):
-                # Возвращаем ID выбранной ветки ("default" или числовой ID)
                 return display_options[choice - 1][0]
             print(f"⚠️ Пожалуйста, выберите номер от 1 до {len(display_options)}")
         except ValueError:
@@ -260,25 +271,21 @@ def _select_output_formats(creators: List[Any]) -> List[Any]:
         prompt = "📑 Выберите формат(ы) (можно несколько через запятую): "
         choice_str = input(prompt).strip()
 
-        choices = {c.strip() for c in choice_str.split(",") if c.strip()}
+        choices = {c.strip() for c in choice_str.split(",")}
 
         if not choices:
             print("⚠️ Выбор не может быть пустым. Пожалуйста, попробуйте снова.")
             continue
 
-        # Проверяем на "все форматы"
         if has_all_option and all_option_num in choices:
             if len(choices) > 1:
-                print(
-                    f"⚠️ Если вы выбираете '{all_option_num}. Все форматы', другие варианты указывать не нужно."
-                )
+                print(f"⚠️ Если вы выбираете '{all_option_num}. Все форматы', другие варианты указывать не нужно.")
                 continue
             return creators
 
         selected_creators = set()
         invalid_choices = []
 
-        # Обрабатываем остальные выборы
         for choice in choices:
             if choice in options:
                 selected_creators.add(options[choice])
@@ -286,13 +293,10 @@ def _select_output_formats(creators: List[Any]) -> List[Any]:
                 invalid_choices.append(choice)
 
         if invalid_choices:
-            print(
-                f"⚠️ Неверный выбор: {', '.join(sorted(invalid_choices))}. Пожалуйста, попробуйте снова."
-            )
+            print(f"⚠️ Неверный выбор: {', '.join(sorted(invalid_choices))}. Пожалуйста, попробуйте снова.")
             continue
 
         if selected_creators:
-            # Возвращаем в том порядке, в котором они были в исходном списке
             return [c for c in creators if c in selected_creators]
 
 
@@ -306,7 +310,6 @@ def _generate_books(
     print("─" * 60)
     for creator in creators:
         try:
-            # Обновляем настройки в процессоре контента перед созданием файла
             creator.update_settings()
 
             filename = creator.create(novel_info, chapters_data, selected_branch_id)
@@ -328,7 +331,6 @@ def _cleanup_temp_folder(novel_id: Any):
 
 if __name__ == "__main__":
     try:
-        # Проверяем аргументы командной строки для выбора интерфейса
         use_gui = "--gui" in sys.argv or "-g" in sys.argv
         main(use_gui)
     finally:

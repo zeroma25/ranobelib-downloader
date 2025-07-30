@@ -2,11 +2,11 @@
 Модуль для создания FB2 файлов
 """
 
-import os
 import base64
-import mimetypes
 import datetime
-from typing import Dict, List, Any, Optional, Tuple, Set
+import mimetypes
+import os
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from bs4 import BeautifulSoup, Tag
 
@@ -16,7 +16,6 @@ from ..processing import ContentProcessor
 class Fb2Creator(ContentProcessor):
     """Класс для создания FB2-файлов"""
 
-    # Пространства имён FB2
     _FB2_NAMESPACE = "http://www.gribuser.ru/xml/fictionbook/2.0"
     _XLINK_NAMESPACE = "http://www.w3.org/1999/xlink"
 
@@ -37,18 +36,15 @@ class Fb2Creator(ContentProcessor):
         """Создание FB2-файла с главами новеллы."""
         _, image_folder = self.prepare_dirs(novel_info.get("id"))
 
-        # 1. Подготовка глав и обложки
         prepared_chapters = self.prepare_chapters(
             novel_info, chapters_data, selected_branch_id, image_folder
         )
         cover_filename = self.download_cover(novel_info, image_folder)
 
-        # 2. Сборка частей FB2
         description_xml = self._build_description_xml(novel_info, cover_filename)
         body_xml, referenced_images = self._build_body_xml(prepared_chapters, novel_info)
         binaries_xml = self._build_binaries_xml(image_folder, referenced_images, cover_filename)
 
-        # 3. Сборка и сохранение документа
         fb2_full = (
             '<?xml version="1.0" encoding="utf-8"?>\n'
             f'<FictionBook xmlns="{self._FB2_NAMESPACE}" xmlns:l="{self._XLINK_NAMESPACE}">\n'
@@ -105,19 +101,23 @@ class Fb2Creator(ContentProcessor):
             encoded = base64.b64encode(f.read()).decode("ascii")
         return mime, encoded
 
-    def _build_description_xml(
-        self, novel_info: Dict[str, Any], cover_filename: Optional[str]
-    ) -> str:
+    def _build_description_xml(self, novel_info: Dict[str, Any], cover_filename: Optional[str]) -> str:
         """Создание XML-блока <description> для FB2."""
         title, author, annotation, genres = self.extract_title_author_summary(novel_info)
         year = self.extract_year(novel_info) or str(datetime.datetime.now().year)
 
         genres_xml = "\n    ".join(f"<genre>{g}</genre>" for g in genres)
         author_xml = f"<author>\n      <nickname>{author}</nickname>\n    </author>" if author else ""
-        cover_xml = f'<coverpage>\n      <image l:href="#{cover_filename}"/>\n    </coverpage>' if cover_filename else ""
-        
+        cover_xml = (
+            f'<coverpage>\n      <image l:href="#{cover_filename}"/>\n    </coverpage>'
+            if cover_filename
+            else ""
+        )
+
         if annotation:
-            annotation_lines = [f"      <p>{line.strip()}</p>" for line in annotation.split('\n') if line.strip()]
+            annotation_lines = [
+                f"      <p>{line.strip()}</p>" for line in annotation.split("\n") if line.strip()
+            ]
             annotation_xml = f"<annotation>\n{'\n'.join(annotation_lines)}\n    </annotation>"
         else:
             annotation_xml = ""
@@ -149,7 +149,6 @@ class Fb2Creator(ContentProcessor):
         volume_chapters: Dict[str, List[str]] = {}
         all_referenced_images: Set[str] = set()
 
-        # Определяем общее количество томов во всей новелле
         total_volumes = self.get_total_volume_count(novel_info)
 
         print("📦 Создание FB2...")
@@ -157,7 +156,6 @@ class Fb2Creator(ContentProcessor):
             ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
             vol_num = str(prep["volume"])
 
-            # Формируем заголовок главы в зависимости от настроек и общего количества томов
             if total_volumes > 1 and not self.group_by_volumes and vol_num != "0":
                 chapter_title = f'Том {vol_num} Глава {prep["number"]}'
             else:
@@ -182,7 +180,6 @@ class Fb2Creator(ContentProcessor):
                     f'<section id="vol{vol_num}"><title><p>Том {vol_num}</p></title>{chapters_xml}</section>'
                 )
         elif volume_chapters:
-            # Если группировка отключена или во всей новелле только один том
             for vol_num in sorted(volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0):
                 body_parts.extend(volume_chapters[vol_num])
 
@@ -196,7 +193,6 @@ class Fb2Creator(ContentProcessor):
             return ""
 
         binaries_parts = []
-        # Убедимся, что обложка включена в список, если она есть
         if cover_filename:
             referenced_images.add(cover_filename)
 
@@ -207,9 +203,7 @@ class Fb2Creator(ContentProcessor):
                 continue
             try:
                 mime, data_b64 = self._encode_image(image_path)
-                binaries_parts.append(
-                    f'<binary id="{filename}" content-type="{mime}">{data_b64}</binary>'
-                )
+                binaries_parts.append(f'<binary id="{filename}" content-type="{mime}">{data_b64}</binary>')
             except Exception as e:
                 print(f"⚠️ Не удалось добавить изображение {filename} в FB2: {e}")
 

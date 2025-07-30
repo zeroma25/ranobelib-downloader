@@ -1,6 +1,7 @@
 """
 Модуль для работы с ветками переводов и командами переводчиков
 """
+import re
 from collections import defaultdict
 from typing import Any, Dict, List, Set
 
@@ -20,9 +21,7 @@ def get_formatted_branches_with_teams(
         if chapter_counts.get(branch_id, 0) == 0:
             continue
 
-        branch_info = base_branches.get(
-            branch_id, {"id": branch_id, "teams": [], "active_teams": []}
-        )
+        branch_info = base_branches.get(branch_id, {"id": branch_id, "teams": [], "active_teams": []})
         all_team_names = teams_by_branch.get(branch_id, set())
 
         formatted_branches[branch_id] = {
@@ -40,10 +39,9 @@ def get_branch_info_for_display(branch_info: Dict[str, Any]) -> str:
     branch_name = branch_info["name"]
     chapter_count = branch_info["chapter_count"]
     team_names = branch_info["team_names"]
-    
+
     result = branch_name
 
-    # Отображаем [список команд], если хотя бы одна из них отсутствует в названии ветки
     if team_names:
         name_parts = {part.strip() for part in branch_name.split(",")}
         if set(team_names) - name_parts:
@@ -62,14 +60,9 @@ def get_default_branch_chapters(
     chapters_data: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """Выбирает набор глав по умолчанию, по одному переводу на главу."""
-    # 1. Сортируем главы
     sorted_chapters_list = sorted(chapters_data, key=lambda x: x.get("index", 0))
-    sorted_chapters_list.sort(
-        key=lambda x: _parse_chapter_number_for_sort(x.get("number", "0"))
-    )
+    sorted_chapters_list.sort(key=lambda x: _parse_chapter_number_for_sort(x.get("number", "0")))
 
-    # 2. Создаем карту для быстрого доступа к веткам каждой главы
-    # и получаем уникальный отсортированный список ключей глав
     chapter_branch_map = defaultdict(dict)
     unique_chapter_keys = []
     seen_keys = set()
@@ -84,57 +77,43 @@ def get_default_branch_chapters(
             branch_id_str = "0"
             if isinstance(branch, dict):
                 branch_id_val = branch.get("branch_id")
-                branch_id_str = str(
-                    branch_id_val if branch_id_val is not None else "0"
-                )
+                branch_id_str = str(branch_id_val if branch_id_val is not None else "0")
             elif branch is not None:
                 branch_id_str = str(branch)
 
-            # Сохраняем полную информацию для последующего добавления в список
             if branch_id_str not in chapter_branch_map[key]:
                 chapter_branch_map[key][branch_id_str] = {
                     "chapter": chapter,
                     "branch": branch,
                 }
 
-    # 3. Алгоритм выбора
     selected_chapter_keys = set()
     final_list = []
 
-    # Продолжаем, пока не выберем перевод для каждой главы
     while len(selected_chapter_keys) < len(unique_chapter_keys):
         first_unselected_key = None
         prioritized_branch_id = None
 
-        # Находим первую главу, для которой еще не выбран перевод
         for key in unique_chapter_keys:
             if key not in selected_chapter_keys:
                 available_branches = chapter_branch_map.get(key, {})
                 if available_branches:
-                    # Нашли. Берем первую доступную ветку для этой главы.
                     first_unselected_key = key
-                    # Порядок веток зависит от исходных данных, берем первую
                     prioritized_branch_id = next(iter(available_branches))
                     break
 
-        # Если не осталось невыбранных глав с переводами, выходим
         if not first_unselected_key or not prioritized_branch_id:
             break
 
-        # Теперь проходим по всем главам и выбираем те, которые есть в найденной ветке
         for key in unique_chapter_keys:
             if key not in selected_chapter_keys:
                 available_branches = chapter_branch_map.get(key, {})
                 if prioritized_branch_id in available_branches:
-                    # Выбираем эту главу из этой ветки
                     final_list.append(available_branches[prioritized_branch_id])
                     selected_chapter_keys.add(key)
 
-    # 4. Финальная сортировка списка, т.к. мы добавляли главы не по порядку
     final_list.sort(key=lambda x: x["chapter"].get("index", 0))
-    final_list.sort(
-        key=lambda x: _parse_chapter_number_for_sort(x["chapter"].get("number", "0"))
-    )
+    final_list.sort(key=lambda x: _parse_chapter_number_for_sort(x["chapter"].get("number", "0")))
 
     return final_list
 
@@ -194,7 +173,6 @@ def _get_teams_by_branch(chapters_data: List[Dict[str, Any]]) -> Dict[str, Set[s
                 for team in teams_list:
                     teams[branch_id].add(team.get("name", "Неизвестный"))
             elif not teams_list:
-                # Если у ветки в главе нет списка команд, но есть team_info
                 team_info = branch.get("team")
                 if team_info and isinstance(team_info, dict) and team_info.get("name"):
                     teams[branch_id].add(team_info.get("name"))
@@ -205,9 +183,6 @@ def _get_teams_by_branch(chapters_data: List[Dict[str, Any]]) -> Dict[str, Set[s
 
 def _format_branch_name(branch_id: str, branch_info: Dict[str, Any]) -> str:
     """Формирование основного отображаемого имени для ветки."""
-    # if branch_id == "0":
-    #     return "По умолчанию"
-
     if branch_info["active_teams"]:
         return ", ".join([team["name"] for team in branch_info["active_teams"]])
 
@@ -220,8 +195,6 @@ def _format_branch_name(branch_id: str, branch_info: Dict[str, Any]) -> str:
 
 def _parse_chapter_number_for_sort(number_str: str) -> tuple:
     """Преобразование строки номера главы в кортеж чисел для сортировки."""
-    import re
-
     parts = re.split(r"[.\-_]", str(number_str))
     result = []
     for part in parts:

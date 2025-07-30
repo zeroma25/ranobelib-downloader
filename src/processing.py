@@ -11,23 +11,20 @@ from bs4 import BeautifulSoup, Tag
 from .api import RanobeLibAPI
 from .img import ImageHandler
 from .parser import RanobeLibParser
-from .settings import settings, USER_DATA_DIR
+from .settings import USER_DATA_DIR, settings
 
 
 class ContentProcessor:
     """Класс для получения, обработки и подготовки контента новеллы"""
 
-    # Глобальный кэш для подготовленных глав
     _global_cache: Dict[Tuple[Any, Optional[str]], List[Dict[str, Any]]] = {}
 
     def __init__(self, api: RanobeLibAPI, parser: RanobeLibParser, image_handler: ImageHandler):
         self.api = api
         self.parser = parser
         self.image_handler = image_handler
-        
-        # Загружаем настройки
         self.update_settings()
-    
+
     def update_settings(self):
         """Обновление настроек из модуля settings"""
         self.download_cover_enabled = settings.get("download_cover")
@@ -43,8 +40,6 @@ class ContentProcessor:
         image_folder: str,
     ) -> List[Dict[str, Any]]:
         """Получение списка подготовленных глав."""
-
-        # Обновляем настройки перед обработкой
         self.update_settings()
 
         cache_key = (novel_info.get("id"), selected_branch_id)
@@ -61,19 +56,14 @@ class ContentProcessor:
         for i, ch_data in enumerate(tqdm(filtered, desc="⏱️ Загрузка глав", unit="ch")):
             remaining_requests = total_chapters - (i + 1)
             prepared.append(
-                self._process_single_chapter(
-                    ch_data, novel_info, image_folder, remaining_requests
-                )
+                self._process_single_chapter(ch_data, novel_info, image_folder, remaining_requests)
             )
 
-        # Обновляем кэш
         self._global_cache[cache_key] = prepared
 
         return prepared
-    
-    def extract_title_author_summary(
-        self, novel_info: Dict[str, Any]
-    ) -> Tuple[str, str, str, List[str]]:
+
+    def extract_title_author_summary(self, novel_info: Dict[str, Any]) -> Tuple[str, str, str, List[str]]:
         """Получение метаданных из информации о новелле."""
         title_raw = (
             novel_info.get("rus_name")
@@ -120,24 +110,16 @@ class ContentProcessor:
         if novel_id in self._volumes_count_cache:
             return self._volumes_count_cache[novel_id]
 
-        # Если данные о главах не переданы, загружаем их через API
         if not chapters_data:
-            slug = (
-                novel_info.get("slug_url")
-                or f"{novel_info.get('id')}--{novel_info.get('slug')}"
-            )
+            slug = novel_info.get("slug_url") or f"{novel_info.get('id')}--{novel_info.get('slug')}"
             try:
                 chapters_data = self.api.get_novel_chapters(slug)
             except Exception:
                 chapters_data = []
 
-        # Считаем количество уникальных томов
-        volumes_set = {
-            str(chapter.get("volume", "0")) for chapter in (chapters_data or [])
-        }
+        volumes_set = {str(chapter.get("volume", "0")) for chapter in (chapters_data or [])}
         total_volumes = len(volumes_set)
 
-        # Гарантируем, что хотя бы один том присутствует
         if total_volumes == 0:
             total_volumes = 1
 
@@ -159,9 +141,7 @@ class ContentProcessor:
         filename = os.path.join(downloads_dir, f"{safe_title}.{extension}")
         counter = 1
         while os.path.exists(filename):
-            filename = os.path.join(
-                downloads_dir, f"{safe_title} ({counter}).{extension}"
-            )
+            filename = os.path.join(downloads_dir, f"{safe_title} ({counter}).{extension}")
             counter += 1
         return filename
 
@@ -169,7 +149,7 @@ class ContentProcessor:
         """Скачивание обложки."""
         if not self.download_cover_enabled:
             return None
-            
+
         cover_filename: Optional[str] = None
         if novel_info.get("cover") and novel_info["cover"].get("default"):
             cover_url = novel_info["cover"]["default"]
@@ -191,7 +171,7 @@ class ContentProcessor:
 
             img_src = img.get("src")
             if not isinstance(img_src, str) or not img_src.strip():
-                img.decompose()  # Удаляем некорректный тег
+                img.decompose()
                 continue
 
             final_filename = self.image_handler.download_image(
@@ -201,31 +181,24 @@ class ContentProcessor:
             if final_filename:
                 img["src"] = f"images/{final_filename}"
             else:
-                img.decompose()  # Удаляем, если скачать не удалось
+                img.decompose()
 
         return str(soup)
-    
+
     def _convert_br_to_paragraphs(self, html: str) -> str:
         """Замена разрывов строк <br> на абзацы <p>...</p>."""
         if not html:
             return ""
 
-        # 1. Унифицируем все теги <br>, игнорируя регистр и возможный слэш.
         normalized = re.sub(r"(?i)<br\s*/?>", "<br>", html)
-
-        # 2. Разбиваем по ОДНОМУ ИЛИ НЕСКОЛЬКИМ подряд <br>  (учитываем пробельные символы между ними)
         parts = re.split(r"(?:<br>\s*)+", normalized)
 
         output_parts: List[str] = []
         for part in parts:
-            # Обрезаем пробелы и управляющие символы
             text = part.strip()
             if not text:
-                # Пустые части встречаются, когда было несколько <br> подряд. Просто пропускаем их.
                 continue
 
-            # 3. Убираем внешние <p> и </p>, если они есть,
-            #    чтобы избежать вложенных параграфов при дальнейшем оборачивании.
             text = re.sub(r"(?i)^<p[^>]*>", "", text)
             text = re.sub(r"(?i)</p>$", "", text)
             text = text.strip()
@@ -233,22 +206,18 @@ class ContentProcessor:
             if not text:
                 continue
 
-            # 4. Оборачиваем в корректный параграф
             output_parts.append(f"<p>{text}</p>")
 
         return "".join(output_parts)
 
     def _parse_chapter_number(self, number_str: str) -> tuple:
         """Преобразование строки номера главы в кортеж чисел для сортировки."""
-        # Разбиваем строку на компоненты по разделителям
-        parts = re.split(r'[.\-_]', str(number_str))
-        # Преобразуем каждый компонент в число, если возможно
+        parts = re.split(r"[.\-_]", str(number_str))
         result = []
         for part in parts:
             try:
                 result.append(int(part))
             except ValueError:
-                # Если не удалось преобразовать в число, оставляем как строку
                 result.append(part)
         return tuple(result)
 
@@ -258,12 +227,10 @@ class ContentProcessor:
         selected_branch_id: Optional[str],
     ) -> List[Dict[str, Any]]:
         """Фильтрация глав по выбранной ветке и их сортировка."""
-        # Специальный обработчик для автовыбора по умолчанию
         if selected_branch_id == "default":
             from .branches import get_default_branch_chapters
 
             filtered = get_default_branch_chapters(chapters_data)
-            # Сортировка уже не нужна, так как get_default_branch_chapters возвращает отсортированный список
             return filtered
 
         if selected_branch_id:
@@ -273,9 +240,7 @@ class ContentProcessor:
                     branch_id_str = "0"
                     if isinstance(branch, dict):
                         branch_id_val = branch.get("branch_id")
-                        branch_id_str = str(
-                            branch_id_val if branch_id_val is not None else "0"
-                        )
+                        branch_id_str = str(branch_id_val if branch_id_val is not None else "0")
                     elif branch is not None:
                         branch_id_str = str(branch)
 
@@ -287,8 +252,7 @@ class ContentProcessor:
                 for chapter in chapters_data
                 for branch in chapter.get("branches", [])
             ]
-        
-        # Сначала сортируем по индексу (если есть), затем по числовому значению номера главы
+
         filtered.sort(key=lambda x: x["chapter"].get("index", 0))
         filtered.sort(key=lambda x: self._parse_chapter_number(x["chapter"].get("number", "0")))
         return filtered
@@ -313,8 +277,14 @@ class ContentProcessor:
         html = ""
         if chapter_data.get("content"):
             content = chapter_data["content"]
-            if isinstance(content, dict) and content.get("type") == "doc" and content.get("content"):
-                html = self.parser.json_to_html(content["content"], chapter_data.get("attachments", []))
+            if (
+                isinstance(content, dict)
+                and content.get("type") == "doc"
+                and content.get("content")
+            ):
+                html = self.parser.json_to_html(
+                    content["content"], chapter_data.get("attachments", [])
+                )
             else:
                 html = str(content)
         return html
@@ -341,44 +311,36 @@ class ContentProcessor:
         branch_id = "0"
         if isinstance(branch, dict):
             branch_id_val = branch.get("branch_id")
-            # branch_id '0' используется для веток по умолчанию или тех, у которых нет ID
             branch_id = str(branch_id_val if branch_id_val is not None else "0")
         elif branch is not None:
             branch_id = str(branch)
 
-        raw_html = self._fetch_chapter_html(
-            novel_info, volume, number, branch_id, upcoming_requests
-        )
+        raw_html = self._fetch_chapter_html(novel_info, volume, number, branch_id, upcoming_requests)
         processed_html = self._prepare_chapter_content(raw_html, image_folder)
 
-        # Добавляем информацию о переводчике, если включено
         if self.add_translator and isinstance(branch, dict):
             translator_names = []
-            
-            # Обработка нового формата с `teams` (список)
+
             teams = branch.get("teams")
             if teams and isinstance(teams, list):
                 translator_names.extend([team.get("name") for team in teams if team.get("name")])
-            
-            # Обработка старого формата с `team` (объект)
+
             team_info = branch.get("team")
             if not translator_names and team_info and isinstance(team_info, dict):
                 team_name = team_info.get("name")
                 if team_name:
                     translator_names.append(team_name)
 
-            # Если имена переводчиков так и не найдены, добавляем значение по умолчанию
             if not translator_names:
                 translator_names.append("Неизвестный")
 
             translator_str = "Переводчик: " + ", ".join(filter(None, translator_names))
             soup = BeautifulSoup(processed_html, "html.parser")
-            
+
             translator_tag = soup.new_tag("p")
             translator_tag.string = translator_str
-            translator_tag.attrs['style'] = "font-weight: bold; font-style: italic; text-align: right;"
-            
-            # Вставляем информацию о переводчике в начало обработанного HTML
+            translator_tag.attrs["style"] = "font-weight: bold; font-style: italic; text-align: right;"
+
             soup.insert(0, translator_tag)
             processed_html = str(soup)
 
@@ -388,7 +350,7 @@ class ContentProcessor:
             "name": ch_info.get("name"),
             "html": processed_html,
         }
-        
+
         return result
 
     def _cleanup_html_text(self, html: str) -> str:
@@ -397,18 +359,17 @@ class ContentProcessor:
             return ""
         soup = BeautifulSoup(html, "html.parser")
         for text_node in soup.find_all(text=True):
-            if text_node.parent and text_node.parent.name in ['style', 'script', 'pre']:
+            if text_node.parent and text_node.parent.name in ["style", "script", "pre"]:
                 continue
-            
+
             current_text = str(text_node)
             new_text = re.sub(" +", " ", current_text.replace("\n", " "))
-            
+
             if new_text != current_text:
                 text_node.replace_with(new_text)  # type: ignore
-        
-        # Удаляем атрибут data-paragraph-index у тегов <p>
-        for p_tag in soup.find_all('p'):
-            if isinstance(p_tag, Tag) and p_tag.has_attr('data-paragraph-index'):  # type: ignore[attr-defined]
-                del p_tag['data-paragraph-index']  # type: ignore[index]
-        
+
+        for p_tag in soup.find_all("p"):
+            if isinstance(p_tag, Tag) and p_tag.has_attr("data-paragraph-index"):  # type: ignore[attr-defined]
+                del p_tag["data-paragraph-index"]  # type: ignore[index]
+
         return str(soup) 
