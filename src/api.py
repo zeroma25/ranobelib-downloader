@@ -2,6 +2,7 @@
 Модуль для работы с API RanobeLIB
 """
 
+import threading
 import time
 from collections import deque
 from typing import Any, Callable, Deque, Dict, List, Optional
@@ -13,6 +14,10 @@ REQUESTS_LIMIT = 90
 REQUESTS_PERIOD = 60
 REQUEST_TIMEOUT = 10
 RETRY_DELAYS = [3, 3, 30, 30, 30]
+
+
+class OperationCancelledError(Exception):
+    """Исключение, выбрасываемое при отмене операции."""
 
 
 class RanobeLibAPI:
@@ -31,6 +36,11 @@ class RanobeLibAPI:
         )
         self.request_timestamps: Deque[float] = deque()
         self.token_refresh_callback: Optional[Callable[[], bool]] = None
+        self.cancellation_event = threading.Event()
+
+    def cancel_pending_requests(self):
+        """Установка флага отмены для ожидающих запросов."""
+        self.cancellation_event.set()
 
     def set_token_refresh_callback(self, callback: Callable[[], bool]):
         """Установка функции-обработчика для обновления токена."""
@@ -55,6 +65,7 @@ class RanobeLibAPI:
         upcoming_requests: int = 0,
     ) -> Dict[str, Any]:
         """Выполнение запроса к API с контролем частоты, обработкой ошибок и повторными попытками."""
+        self.cancellation_event.clear()
         self._wait_for_rate_limit(upcoming_requests=upcoming_requests)
 
         if not retry:
@@ -123,6 +134,16 @@ class RanobeLibAPI:
         data = self.make_request(url, retry=False)
         return data.get("data", {})
 
+    def _interruptible_sleep(self, duration: float):
+        """Приостанавливает выполнение на заданное время, но может быть прервано событием отмены."""
+        if duration <= 0:
+            return
+
+        end_time = time.monotonic() + duration
+        while time.monotonic() < end_time:
+            if self.cancellation_event.wait(timeout=0.1):
+                raise OperationCancelledError("Операция отменена")
+
     def _wait_for_rate_limit(self, upcoming_requests: int = 0) -> None:
         """Динамическая задержка для соблюдения лимита и равномерного распределения запросов."""
         current_time = time.monotonic()
@@ -139,7 +160,7 @@ class RanobeLibAPI:
         if requests_in_period >= REQUESTS_LIMIT:
             wait_for_slot = self.request_timestamps[0] - (current_time - REQUESTS_PERIOD)
             if wait_for_slot > 0:
-                time.sleep(wait_for_slot)
+                self._interruptible_sleep(wait_for_slot)
 
             current_time = time.monotonic()
             while self.request_timestamps and self.request_timestamps[0] < current_time - REQUESTS_PERIOD:
@@ -151,7 +172,7 @@ class RanobeLibAPI:
             next_allowed_time = self.request_timestamps[-1] + interval
             wait_time = next_allowed_time - current_time
             if wait_time > 0:
-                time.sleep(wait_time)
+                self._interruptible_sleep(wait_time)
 
         self.request_timestamps.append(time.monotonic())
 
@@ -171,7 +192,7 @@ class RanobeLibAPI:
                     print(f"❌ Соединение не установлено: {e}. Проверьте подключение к сети или попробуйте позже.")
                     raise
 
-                time.sleep(delay)
+                self._interruptible_sleep(delay)
 
         return {}
 

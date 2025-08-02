@@ -3,13 +3,14 @@
 """
 
 from src.main import main
+from src.api import OperationCancelledError
 
 
 def run():
     """Запуск основной функции для CLI с корректной обработкой принудительного прерывания."""
     try:
         main(use_gui=False)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, OperationCancelledError):
         print("\n⛔️ Прервано пользователем.")
     finally:
         print("═" * 60)

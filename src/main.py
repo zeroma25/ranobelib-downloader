@@ -4,11 +4,12 @@
 
 import os
 import shutil
+import signal
 import sys
 from typing import Any, Dict, List, Optional
 
 from . import __version__
-from .api import RanobeLibAPI
+from .api import OperationCancelledError, RanobeLibAPI
 from .auth import RanobeLibAuth
 from .branches import (
     get_branch_info_for_display,
@@ -43,6 +44,11 @@ def run_cli():
     parser = RanobeLibParser(api)
     image_handler = ImageHandler(api)
     api.set_token_refresh_callback(auth.refresh_token)
+
+    def signal_handler(sig, frame):
+        api.cancel_pending_requests()
+
+    signal.signal(signal.SIGINT, signal_handler)
 
     creators = [
         EpubCreator(api, parser, image_handler),
@@ -314,6 +320,8 @@ def _generate_books(
 
             filename = creator.create(novel_info, chapters_data, selected_branch_id)
             print(f"✅ {creator.format_name} успешно создан: {filename}")
+        except OperationCancelledError:
+            raise
         except Exception as e:
             print(f"❌ Ошибка при создании {creator.format_name}: {e}")
 

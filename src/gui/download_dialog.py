@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..api import RanobeLibAPI
+from ..api import OperationCancelledError, RanobeLibAPI
 from ..creators import EpubCreator, Fb2Creator, HtmlCreator, TxtCreator
 from ..img import ImageHandler
 from ..parser import RanobeLibParser
@@ -67,6 +67,7 @@ class DownloadWorker(QThread):
         if not self.is_cancelled:
             self.progress_update.emit("Отмена процесса...", 0)
             self.is_cancelled = True
+            self.api.cancel_pending_requests()
 
     def run(self):
         """Запуск процесса скачивания и создания книг"""
@@ -84,6 +85,9 @@ class DownloadWorker(QThread):
             if not self.is_cancelled:
                 self._create_books()
 
+        except OperationCancelledError:
+            should_emit_finish = True
+            self.is_cancelled = True
         except Exception as e:
             should_emit_finish = False
             if not self.is_cancelled:
