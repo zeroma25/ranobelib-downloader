@@ -125,41 +125,35 @@ class RanobeLibAPI:
 
     def _wait_for_rate_limit(self, upcoming_requests: int = 0) -> None:
         """Динамическая задержка для соблюдения лимита и равномерного распределения запросов."""
-        current_time = time.time()
-        while self.request_timestamps and current_time - self.request_timestamps[0] > REQUESTS_PERIOD:
+        current_time = time.monotonic()
+
+        while self.request_timestamps and self.request_timestamps[0] < current_time - REQUESTS_PERIOD:
             self.request_timestamps.popleft()
 
-        if len(self.request_timestamps) + upcoming_requests + 1 <= REQUESTS_LIMIT:
-            self.request_timestamps.append(time.time())
+        requests_in_period = len(self.request_timestamps)
+
+        if requests_in_period + upcoming_requests + 1 <= REQUESTS_LIMIT:
+            self.request_timestamps.append(time.monotonic())
             return
 
-        while True:
-            current_time = time.time()
+        if requests_in_period >= REQUESTS_LIMIT:
+            wait_for_slot = self.request_timestamps[0] - (current_time - REQUESTS_PERIOD)
+            if wait_for_slot > 0:
+                time.sleep(wait_for_slot)
 
-            while self.request_timestamps and current_time - self.request_timestamps[0] > REQUESTS_PERIOD:
+            current_time = time.monotonic()
+            while self.request_timestamps and self.request_timestamps[0] < current_time - REQUESTS_PERIOD:
                 self.request_timestamps.popleft()
+            requests_in_period = len(self.request_timestamps)
 
-            if len(self.request_timestamps) >= REQUESTS_LIMIT:
-                wait_duration = (self.request_timestamps[0] + REQUESTS_PERIOD) - current_time
-                if wait_duration > 0:
-                    time.sleep(wait_duration)
-                continue
+        if self.request_timestamps:
+            interval = REQUESTS_PERIOD / REQUESTS_LIMIT
+            next_allowed_time = self.request_timestamps[-1] + interval
+            wait_time = next_allowed_time - current_time
+            if wait_time > 0:
+                time.sleep(wait_time)
 
-            if self.request_timestamps:
-                time_until_period_end = REQUESTS_PERIOD - (current_time - self.request_timestamps[0])
-                remaining_requests = max(1, REQUESTS_LIMIT - len(self.request_timestamps))
-                average_spacing = time_until_period_end / remaining_requests
-
-                time_before_sleep = time.time()
-                elapsed_since_loop_start = time_before_sleep - current_time
-
-                sleep_duration = average_spacing - elapsed_since_loop_start
-                if sleep_duration > 0:
-                    time.sleep(sleep_duration)
-
-            break
-
-        self.request_timestamps.append(time.time())
+        self.request_timestamps.append(time.monotonic())
 
     def _retry_request(self, func: Callable, *args, **kwargs) -> Dict[str, Any]:
         """Выполнение функции с повторными попытками."""
