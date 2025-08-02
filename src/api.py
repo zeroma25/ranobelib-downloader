@@ -109,7 +109,22 @@ class RanobeLibAPI:
         """Получение списка глав новеллы."""
         url = f"{self.api_url}{slug}/chapters"
         data = self.make_request(url)
-        return data.get("data", [])
+
+        chapters: List[Dict[str, Any]] = data.get("data", [])
+
+        filtered_chapters: List[Dict[str, Any]] = []
+        for chapter in chapters:
+            branches = chapter.get("branches", [])
+            is_on_moderation = any(
+                isinstance(branch, dict)
+                and branch.get("moderation", {}).get("id") == 0
+                for branch in branches
+            )
+
+            if not is_on_moderation:
+                filtered_chapters.append(chapter)
+
+        return filtered_chapters
 
     def get_chapter_content(
         self,
