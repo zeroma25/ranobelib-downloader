@@ -2,10 +2,12 @@
 Виджет с настройками для выбора формата скачивания и пути сохранения
 """
 
+import base64
 import os
 from typing import Any, Dict, List
 
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -123,9 +125,15 @@ class SettingsWidget(QWidget):
         settings_layout.addLayout(path_layout)
         main_layout.addWidget(content_frame)
 
-        self.download_button = QPushButton("Скачать")
+        self.download_button = QPushButton(" Скачать")
         self.download_button.setMinimumHeight(40)
         self.download_button.setObjectName("downloadButton")
+
+        base64_icon = "PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyNCcgaGVpZ2h0PScyNCcgdmlld0JveD0nMCAwIDI0IDI0Jz48ZyBmaWxsPScjZmZmZmZmJyBmaWxsLXJ1bGU9J2V2ZW5vZGQnIGNsaXAtcnVsZT0nZXZlbm9kZCc+PHBhdGggZD0nTTEzIDExLjE1VjRhMSAxIDAgMSAwLTIgMHY3LjE1TDguNzggOC4zNzRhMSAxIDAgMSAwLTEuNTYgMS4yNWw0IDVhMSAxIDAgMCAwIDEuNTYgMGw0LTVhMSAxIDAgMSAwLTEuNTYtMS4yNXonLz48cGF0aCBkPSdNOS42NTcgMTUuODc0TDcuMzU4IDEzSDVhMiAyIDAgMCAwLTIgMnY0YTIgMiAwIDAgMCAyIDJoMTRhMiAyIDAgMCAwIDItMnYtNGEyIDIgMCAwIDAtMi0yaC0yLjM1OGwtMi4zIDIuODc0YTMgMyAwIDAgMS00LjY4NSAwTTE3IDE2YTEgMSAwIDEgMCAwIDJoLjAxYTEgMSAwIDEgMCAwLTJ6Jy8+PC9nPjwvc3ZnPg=="
+        pixmap = QPixmap()
+        pixmap.loadFromData(base64.b64decode(base64_icon))
+        icon = QIcon(pixmap)
+        self.download_button.setIcon(icon)
 
         main_layout.addWidget(self.download_button)
 
