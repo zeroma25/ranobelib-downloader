@@ -4,6 +4,7 @@
 
 import os
 import shutil
+import time
 from typing import Any, Dict, List
 
 from PyQt6.QtCore import QThread, Qt, QUrl, pyqtSignal
@@ -32,6 +33,7 @@ class DownloadWorker(QThread):
 
     progress_update = pyqtSignal(str, int)
     chapter_download = pyqtSignal(int, int)
+    time_update = pyqtSignal(float, float)  # elapsed, remaining
     format_progress = pyqtSignal(str, int, int)
     finished = pyqtSignal(list)
     error = pyqtSignal(str)
@@ -59,6 +61,7 @@ class DownloadWorker(QThread):
         self.is_cancelled = False
         self._temp_dir = ""
 
+        self.start_time = 0
         self.prepared_chapters = []
         self.created_files = []
 
@@ -71,6 +74,7 @@ class DownloadWorker(QThread):
 
     def run(self):
         """Запуск процесса скачивания и создания книг"""
+        self.start_time = time.time()
         self.image_handler.reset()
 
         novel_id = self.novel_info.get("id")
@@ -147,6 +151,15 @@ class DownloadWorker(QThread):
             )
 
             self.prepared_chapters.append(prepared_chapter)
+
+            elapsed_time = time.time() - self.start_time
+            chapters_done = i + 1
+            remaining_time = -1.0
+            if chapters_done > 0:
+                avg_time_per_chapter = elapsed_time / chapters_done
+                chapters_remaining = total_chapters - chapters_done
+                remaining_time = avg_time_per_chapter * chapters_remaining
+            self.time_update.emit(elapsed_time, remaining_time)
 
         self.progress_update.emit("Все главы загружены", 100)
 
@@ -279,6 +292,14 @@ class DownloadDialog(QDialog):
         self.chapters_label = QLabel("0 из 0 глав загружено")
         chapters_layout.addWidget(self.chapters_label)
 
+        time_layout = QHBoxLayout()
+        self.elapsed_time_label = QLabel("Прошло: 00:00")
+        self.remaining_time_label = QLabel("Осталось: вычисление...")
+        time_layout.addWidget(self.elapsed_time_label)
+        time_layout.addStretch()
+        time_layout.addWidget(self.remaining_time_label)
+        chapters_layout.addLayout(time_layout)
+
         layout.addWidget(chapters_group)
 
         formats_group = QGroupBox("Прогресс создания книг")
@@ -339,6 +360,7 @@ class DownloadDialog(QDialog):
 
         self.download_worker.progress_update.connect(self._on_progress_update)
         self.download_worker.chapter_download.connect(self._on_chapter_download)
+        self.download_worker.time_update.connect(self._on_time_update)
         self.download_worker.format_progress.connect(self._on_format_progress)
         self.download_worker.finished.connect(self._on_download_finished)
         self.download_worker.error.connect(self._on_download_error)
@@ -360,6 +382,15 @@ class DownloadDialog(QDialog):
         else:
             event.accept()
 
+    def _format_time(self, seconds: float) -> str:
+        """Форматирует секунды в строку MM:SS"""
+        if seconds < 0:
+            return "вычисление..."
+        seconds = int(seconds)
+        minutes = seconds // 60
+        seconds %= 60
+        return f"{minutes:02d}:{seconds:02d}"
+
     def _on_progress_update(self, message: str, progress: int):
         """Обработка обновления прогресса"""
         self.log_text.append(message)
@@ -369,11 +400,21 @@ class DownloadDialog(QDialog):
         self.chapters_progress.setValue(current)
         self.chapters_label.setText(f"{current} из {total} глав загружено")
 
+    def _on_time_update(self, elapsed: float, remaining: float):
+        """Обработка обновления времени"""
+        self.elapsed_time_label.setText(f"Прошло: {self._format_time(elapsed)}")
+        self.remaining_time_label.setText(f"Осталось: ~{self._format_time(remaining)}")
+
     def _on_format_progress(self, format_name: str, current: int, total: int):
         """Обработка прогресса создания форматов"""
         self.formats_progress.setValue(current)
         self.formats_label.setText(f"{current} из {total} форматов создано")
         self.log_text.append(f"<b>Создание формата {format_name}...</b>")
+
+        if self.download_worker:
+            elapsed = time.time() - self.download_worker.start_time
+            self.elapsed_time_label.setText(f"Прошло: {self._format_time(elapsed)}")
+            self.remaining_time_label.setText("Осталось: создание книг...")
 
     def _on_download_finished(self, created_files: List[str]):
         """Обработка завершения загрузки"""
@@ -384,6 +425,11 @@ class DownloadDialog(QDialog):
             self.log_text.append("<b>Загрузка отменена</b>")
         else:
             self.log_text.append("<b>Загрузка завершена</b>")
+
+        if self.download_worker:
+            elapsed = time.time() - self.download_worker.start_time
+            self.elapsed_time_label.setText(f"Прошло: {self._format_time(elapsed)}")
+            self.remaining_time_label.setText("Осталось: 00:00")
 
         if created_files:
             self.log_text.append("<b>Созданные файлы:</b>")
@@ -407,6 +453,12 @@ class DownloadDialog(QDialog):
     def _on_download_error(self, error_message: str):
         """Обработка ошибки при загрузке"""
         self.log_text.append(f"<span style='color: red;'><b>Ошибка:</b> {error_message}</span>")
+
+        if self.download_worker:
+            elapsed = time.time() - self.download_worker.start_time
+            self.elapsed_time_label.setText(f"Прошло: {self._format_time(elapsed)}")
+            self.remaining_time_label.setText("Осталось: --:--")
+
         self.close_button.setText("Закрыть")
         self.close_button.setEnabled(True)
         try:
