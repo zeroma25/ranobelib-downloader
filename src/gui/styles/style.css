@@ -30,6 +30,22 @@ QPushButton:disabled {
     border-color: #404040;
 }
 
+/* Стили для кнопки загрузки внутри адресной строки */
+QToolButton#loadButton {
+    border: none;
+    background: transparent;
+    border-radius: 3px;
+    padding: 4px;
+}
+
+QToolButton#loadButton:hover {
+    background-color: #4a4a4a;
+}
+
+QToolButton#loadButton:pressed {
+    background-color: #2a2a2a;
+}
+
 /* Стили для полей ввода */
 QLineEdit {
     background-color: #1e1e1e;

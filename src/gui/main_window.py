@@ -7,7 +7,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from PyQt6.QtCore import QSettings, QSize, Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QAction, QIcon, QPixmap
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QStatusBar,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -82,7 +83,7 @@ class MainWindow(QMainWindow):
 
         self.novel_info: Optional[Dict[str, Any]] = None
         self.chapters_data: List[Dict[str, Any]] = []
-        self.load_action: Optional[QAction] = None
+        self.load_button: Optional[QToolButton] = None
         self.auth_button: Optional[QPushButton] = None
         self.novel_info_bar: Optional[QWidget] = None
         self.novel_title_label: Optional[QLabel] = None
@@ -123,6 +124,8 @@ class MainWindow(QMainWindow):
                 self.auth_manager.configure_auth_button(self.auth_button, button_height)
             if self.about_button:
                 self.about_button.setFixedSize(button_height, button_height)
+            if hasattr(self, '_position_load_button'):
+                self._position_load_button()
             self._initial_layout_done = True
 
     def _setup_ui(self):
@@ -144,17 +147,30 @@ class MainWindow(QMainWindow):
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText("https://ranobelib.me/ru/book/...")
 
-        base64_icon = "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAYElEQVR4nO3UsQ2DMBBAUadlUSoXARahYx+UseChKA0FoiGHYsVvgPuFfZdSVR1BhwGP9G1osPgYoyIZa3Sk3UWmP4ng5br+LDCHBn7uHZQ8PIctmptOxfP9W0KGV+XZAOprVCwY0niaAAAAAElFTkSuQmCC"
+        base64_icon = "iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAY0lEQVR4nO3UsQmEYAyA0X8SXUQLB3ACcQ13FCyvPnAP4Ylop4IHEQ7xg7SvCCQpvZ2FDnWKCh9MaKLADN8NbV90H0r0GC7OaG1BqyOwCAV/CXnYHgVj2X9id51eF/oc0mOaAR2mDe1O9aKOAAAAAElFTkSuQmCC"
         pixmap = QPixmap()
         pixmap.loadFromData(base64.b64decode(base64_icon))
         icon = QIcon(pixmap)
 
-        self.load_action = self.url_input.addAction(
-            icon, QLineEdit.ActionPosition.TrailingPosition
-        )
-        if self.load_action:
-            self.load_action.setToolTip("Загрузить")
-            self.load_action.setVisible(False)
+        self.load_button = QToolButton(self.url_input)
+        self.load_button.setIcon(icon)
+        self.load_button.setObjectName("loadButton")
+        self.load_button.setToolTip("Загрузить")
+        self.load_button.setVisible(False)
+        self.load_button.setCursor(Qt.CursorShape.ArrowCursor)
+        self.load_button.setFixedSize(22, 22)
+        
+        def position_load_button():
+            button_y = (self.url_input.height() - self.load_button.height()) // 2
+            button_x = self.url_input.width() - self.load_button.width() - 3
+            self.load_button.move(button_x, button_y)
+        
+        self.url_input.resizeEvent = lambda event: (
+            QLineEdit.resizeEvent(self.url_input, event),
+            position_load_button()
+        )[1]
+        
+        self._position_load_button = position_load_button
 
         address_layout.addWidget(self.url_input)
 
@@ -203,8 +219,8 @@ class MainWindow(QMainWindow):
     def _setup_connections(self):
         """Настройка сигналов и слотов"""
         self.url_input.returnPressed.connect(self._load_novel)
-        if self.load_action:
-            self.load_action.triggered.connect(self._load_novel)
+        if self.load_button:
+            self.load_button.clicked.connect(self._load_novel)
             self.url_input.textChanged.connect(self._on_url_text_changed)
         if self.auth_button:
             self.auth_button.clicked.connect(self._show_auth_menu)
@@ -214,8 +230,8 @@ class MainWindow(QMainWindow):
 
     def _on_url_text_changed(self, text: str):
         """Показывает или скрывает кнопку загрузки в зависимости от наличия текста"""
-        if self.load_action:
-            self.load_action.setVisible(bool(text))
+        if self.load_button:
+            self.load_button.setVisible(bool(text))
 
     def _load_settings(self):
         """Загрузка настроек приложения"""
