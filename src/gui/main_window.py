@@ -61,6 +61,10 @@ class NovelInfoWorker(QThread):
 
             chapters_data = self.api.get_novel_chapters(self.slug)
             if not chapters_data:
+                if novel_info.get("is_licensed"):
+                    raise ValueError(
+                        "Доступ ограничен по требованию Правообладателя или РКН"
+                    )
                 raise ValueError("Не удалось загрузить список глав")
 
             self.finished.emit(novel_info, chapters_data)

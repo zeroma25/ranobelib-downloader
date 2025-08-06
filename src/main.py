@@ -85,7 +85,10 @@ def run_cli():
     print("🔄 Получение списка глав...")
     chapters_data = api.get_novel_chapters(slug)
     if not chapters_data:
-        print("❌ Не удалось загрузить список глав.")
+        if novel_info.get("is_licensed"):
+            print("❌ Доступ ограничен по требованию Правообладателя или РКН")
+        else:
+            print("❌ Не удалось загрузить список глав.")
         return
 
     branches = get_formatted_branches_with_teams(novel_info, chapters_data)
