@@ -193,7 +193,7 @@ class AuthManager(QObject):
     def start_auth_process(self):
         """Запуск процесса авторизации."""
         if self.auth_worker and self.auth_worker.isRunning():
-            self.status_message.emit("Процесс авторизации уже запущен.", 3000)
+            self.status_message.emit("Процесс авторизации уже запущен", 3000)
             return
 
         self.status_message.emit("Открывается окно авторизации...", 0)
@@ -201,7 +201,7 @@ class AuthManager(QObject):
         auth_data = self.auth.get_auth_code_via_webview()
 
         if not auth_data:
-            self.status_message.emit("Авторизация отменена пользователем.", 3000)
+            self.status_message.emit("Авторизация отменена пользователем", 3000)
             return
 
         self.status_message.emit("Код авторизации получен, обмен на токен...", 0)

@@ -390,13 +390,13 @@ class MainWindow(QMainWindow):
         self.chapters_widget.update_chapters(self.novel_info, self.chapters_data)
 
         self.statusbar.showMessage(
-            f"Загружена информация о новелле: {self.novel_info.get('rus_name', '')}"
+            f"Информация о новелле загружена", 5000
         )
 
     def _on_novel_info_error(self, error_message):
         """Обработчик ошибки при загрузке информации о новелле"""
         QApplication.restoreOverrideCursor()
-        self.statusbar.showMessage("Ошибка загрузки новеллы")
+        self.statusbar.showMessage("Ошибка загрузки информации о новелле", 5000)
         if self.novel_title_label:
             self.novel_title_label.setText(error_message)
             self.novel_title_label.setStyleSheet("color: #e74c3c;")
