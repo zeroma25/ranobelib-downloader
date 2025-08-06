@@ -319,6 +319,9 @@ class ChapterTree(QTreeWidget):
     def _show_context_menu(self, position):
         """Показывает контекстное меню для дерева глав."""
         menu = QMenu(self)
+        menu.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        menu.setWindowFlags(menu.windowFlags() | Qt.WindowType.FramelessWindowHint)
+        
         expand_action = menu.addAction("Развернуть все")
         collapse_action = menu.addAction("Свернуть все")
 

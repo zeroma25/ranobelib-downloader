@@ -162,14 +162,18 @@ QMenu {
     background-color: #2d2d2d;
     border: 1px solid #555555;
     border-radius: 4px;
+    padding: 2px;
 }
 
 QMenu::item {
     padding: 5px 30px 5px 20px;
+    background-color: transparent;
+    border-radius: 2px;
 }
 
 QMenu::item:selected {
     background-color: #3a3a3a;
+    border-radius: 2px;
 }
 
 /* Стили для меню авторизации */
