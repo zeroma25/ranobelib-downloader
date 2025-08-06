@@ -3,6 +3,7 @@
 """
 
 import os
+import re
 import shutil
 import signal
 import sys
@@ -77,7 +78,8 @@ def run_cli():
         )
         return
 
-    title = novel_info.get("rus_name") or novel_info.get("eng_name") or "Без названия"
+    title_raw = novel_info.get("rus_name") or novel_info.get("eng_name") or "Без названия"
+    title = re.sub(r"\s*\((?:Новелла|Novel)\)\s*$", "", title_raw, flags=re.IGNORECASE).strip()
     print(f"📖 Название: {title}")
 
     print("🔄 Получение списка глав...")

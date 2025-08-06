@@ -71,7 +71,7 @@ class ContentProcessor:
             or novel_info.get("name", "Без названия")
         )
         title_raw = self.parser.decode_html_entities(title_raw)
-        title = re.sub(r"\s*\(Новелла\)\s*$", "", title_raw).strip()
+        title = re.sub(r"\s*\((?:Новелла|Novel)\)\s*$", "", title_raw, flags=re.IGNORECASE).strip()
 
         author = ""
         if novel_info.get("authors"):

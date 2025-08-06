@@ -301,11 +301,11 @@ class MainWindow(QMainWindow):
         self.chapters_data = chapters_data
 
         def clean_title(t_raw: Optional[str]) -> str:
-            """Очищает название от HTML-сущностей и суффикса (Новелла)"""
+            """Очищает название от HTML-сущностей и суффикса (Новелла)/(Novel)"""
             if not t_raw:
                 return ""
             t_decoded = self.parser.decode_html_entities(t_raw)
-            return re.sub(r"\s*\(Новелла\)\s*$", "", t_decoded).strip()
+            return re.sub(r"\s*\((?:Новелла|Novel)\)\s*$", "", t_decoded, flags=re.IGNORECASE).strip()
 
         rus_title = clean_title(self.novel_info.get("rus_name"))
         eng_title = clean_title(self.novel_info.get("eng_name"))
