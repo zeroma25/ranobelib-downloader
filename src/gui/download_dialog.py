@@ -268,6 +268,7 @@ class DownloadDialog(QDialog):
 
         self.download_worker = None
         self.created_files = []
+        self._close_requested = False
 
         self._setup_ui()
         self._start_download()
@@ -377,8 +378,9 @@ class DownloadDialog(QDialog):
     def closeEvent(self, event):
         """Перехват события закрытия окна для отмены операции."""
         if self.download_worker and self.download_worker.isRunning():
+            self._close_requested = True
             self._cancel_download()
-            event.ignore()
+            event.accept()
         else:
             event.accept()
 
@@ -445,6 +447,9 @@ class DownloadDialog(QDialog):
             pass
         self.close_button.clicked.connect(self.accept)
 
+        if self._close_requested:
+            self.accept()
+
     def _open_folder(self):
         """Открывает каталог с загруженными файлами."""
         if os.path.isdir(self.save_dir):
@@ -465,4 +470,7 @@ class DownloadDialog(QDialog):
             self.close_button.clicked.disconnect(self._cancel_download)
         except TypeError:
             pass
-        self.close_button.clicked.connect(self.accept) 
+        self.close_button.clicked.connect(self.accept)
+
+        if self._close_requested:
+            self.accept() 
