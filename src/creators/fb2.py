@@ -118,7 +118,8 @@ class Fb2Creator(ContentProcessor):
             annotation_lines = [
                 f"      <p>{line.strip()}</p>" for line in annotation.split("\n") if line.strip()
             ]
-            annotation_xml = f"<annotation>\n{'\n'.join(annotation_lines)}\n    </annotation>"
+            annotation_body = "\n".join(annotation_lines)
+            annotation_xml = f"<annotation>\n{annotation_body}\n    </annotation>"
         else:
             annotation_xml = ""
 
