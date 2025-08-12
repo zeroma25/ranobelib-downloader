@@ -195,4 +195,23 @@ class SettingsWidget(QWidget):
 
     def get_options(self) -> Dict[str, bool]:
         """Возвращает словарь с настройками опций"""
-        return {key: checkbox.isChecked() for key, checkbox in self.option_checkboxes.items()} 
+        return {key: checkbox.isChecked() for key, checkbox in self.option_checkboxes.items()}
+
+    def get_focus_chain(self) -> List[QWidget]:
+        """Возвращает виджеты настроек в порядке табуляции."""
+        chain: List[QWidget] = []
+
+        for key in ["download_cover", "download_images", "add_translator", "group_by_volumes"]:
+            checkbox = self.option_checkboxes.get(key)
+            if checkbox is not None:
+                chain.append(checkbox)
+
+        for key in ["EPUB", "FB2", "HTML", "TXT"]:
+            checkbox = self.format_checkboxes.get(key)
+            if checkbox is not None:
+                chain.append(checkbox)
+
+        chain.append(self.path_edit)
+        chain.append(self.browse_button)
+        chain.append(self.download_button)
+        return chain 

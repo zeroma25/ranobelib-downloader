@@ -215,6 +215,24 @@ class TranslationFilterWidget(QWidget):
         """Возвращает словарь цветов для команд"""
         return self.team_colors
 
+    def get_focus_chain(self) -> List[QWidget]:
+        """Возвращает виджеты (в фокус-цепочке) в порядке их визуального расположения."""
+        chain: List[QWidget] = []
+        for i in range(self.branches_layout.count()):
+            layout_item = self.branches_layout.itemAt(i)
+            if layout_item is None:
+                continue
+            widget = layout_item.widget()
+            if widget is None:
+                continue
+            if isinstance(widget, QCheckBox):
+                chain.append(widget)
+            else:
+                checkbox = widget.findChild(QCheckBox)
+                if checkbox:
+                    chain.append(checkbox)
+        return chain
+
     def _on_branch_state_changed(self, state: int, branch_info: Dict[str, Any]):
         """Обрабатывает изменение состояния чекбокса ветки."""
         is_enabled = state == Qt.CheckState.Checked.value

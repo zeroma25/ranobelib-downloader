@@ -117,6 +117,7 @@ class ChaptersWidget(QWidget):
         )
         self.filter_widget.filters_changed.connect(self._update_chapters_tree)
         self.chapters_tree.stats_changed.connect(self._update_stats_label)
+        self._apply_tab_order()
 
     def clear(self):
         """Очищает виджет от информации о новелле."""
@@ -181,6 +182,7 @@ class ChaptersWidget(QWidget):
         self.chapters_tree.set_team_colors(self.team_colors)
         self._update_chapters_tree()
         self.chapters_tree.select_default_chapters()
+        self._apply_tab_order()
 
     def _parse_chapter_number(self, number_str: str) -> tuple:
         """Преобразование строки номера главы в кортеж чисел для сортировки."""
@@ -253,4 +255,21 @@ class ChaptersWidget(QWidget):
         is_visible = total_translations > 0
         self.select_all_button.setVisible(is_visible)
         self.select_default_button.setVisible(is_visible)
-        self.deselect_all_button.setVisible(is_visible) 
+        self.deselect_all_button.setVisible(is_visible)
+
+    def _apply_tab_order(self) -> None:
+        """Устанавливает явный порядок перехода по Tab."""
+        try:
+            current = self.chapters_tree
+
+            for w in self.filter_widget.get_focus_chain():
+                if w and w.isEnabled():
+                    QWidget.setTabOrder(current, w)
+                    current = w
+
+            for w in self.settings_widget.get_focus_chain():
+                if w and w.isEnabled():
+                    QWidget.setTabOrder(current, w)
+                    current = w
+        except Exception:
+            pass 
