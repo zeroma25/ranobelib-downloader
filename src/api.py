@@ -32,6 +32,7 @@ class RanobeLibAPI:
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
                 "Origin": self.site_url,
                 "Referer": f"{self.site_url}/",
+                "Site-Id": "3",
             }
         )
         self.request_timestamps: Deque[float] = deque()
