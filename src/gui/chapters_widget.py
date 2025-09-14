@@ -31,6 +31,18 @@ class ChaptersWidget(QWidget):
         self.select_default_button.setVisible(False)
         self.deselect_all_button.setVisible(False)
 
+    def set_api_components(self, api, parser, image_handler):
+        """Передает API компоненты в дерево глав для предпросмотра"""
+        self._api_components = {
+            'api': api,
+            'parser': parser,
+            'image_handler': image_handler
+        }
+        
+        if hasattr(self, 'chapters_tree') and hasattr(self.chapters_tree, 'set_api_components'):
+            if self.novel_info:
+                self.chapters_tree.set_api_components(api, parser, image_handler, self.novel_info)
+
     def _setup_ui(self):
         """Настройка интерфейса виджета"""
         main_layout = QHBoxLayout(self)
@@ -183,6 +195,14 @@ class ChaptersWidget(QWidget):
         self._update_chapters_tree()
         self.chapters_tree.select_default_chapters()
         self._apply_tab_order()
+        
+        if hasattr(self.chapters_tree, 'set_api_components') and hasattr(self, '_api_components'):
+            self.chapters_tree.set_api_components(
+                self._api_components['api'],
+                self._api_components['parser'], 
+                self._api_components['image_handler'],
+                self.novel_info
+            )
 
     def _parse_chapter_number(self, number_str: str) -> tuple:
         """Преобразование строки номера главы в кортеж чисел для сортировки."""

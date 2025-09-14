@@ -392,6 +392,7 @@ class MainWindow(QMainWindow):
             self.info_icon_label.setVisible(True)
 
         self.chapters_widget.update_chapters(self.novel_info, self.chapters_data)
+        self.chapters_widget.set_api_components(self.api, self.parser, self.image_handler)
 
         self.statusbar.showMessage(
             f"Информация о новелле загружена", 5000

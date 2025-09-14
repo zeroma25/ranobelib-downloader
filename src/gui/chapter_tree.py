@@ -2,12 +2,16 @@
 Виджет дерева глав для отображения и выбора глав новеллы
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from PyQt6.QtCore import QTimer, Qt, QVariant, pyqtSignal
 from PyQt6.QtWidgets import QMenu, QTreeWidgetItem, QTreeWidgetItemIterator, QTreeWidget
 
+from ..api import RanobeLibAPI
+from ..img import ImageHandler
+from ..parser import RanobeLibParser
 from .chapter_delegate import TEAM_NAME_ROLE, SINGLE_LINE_ITEM_ROLE, ChapterItemDelegate
+from .preview_dialog import PreviewDialog
 
 
 class ChapterTree(QTreeWidget):
@@ -21,6 +25,12 @@ class ChapterTree(QTreeWidget):
         self._stats_update_timer = QTimer(self)
         self._stats_update_timer.setSingleShot(True)
         self._stats_update_timer.timeout.connect(self._update_stats)
+        
+        self.api: Optional[RanobeLibAPI] = None
+        self.parser: Optional[RanobeLibParser] = None
+        self.image_handler: Optional[ImageHandler] = None
+        self.novel_info: Optional[Dict[str, Any]] = None
+        
         self._setup_ui()
 
     def _setup_ui(self):
@@ -35,6 +45,21 @@ class ChapterTree(QTreeWidget):
 
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
+        
+        self.itemDoubleClicked.connect(self._on_item_double_clicked)
+
+    def set_api_components(
+        self, 
+        api: RanobeLibAPI, 
+        parser: RanobeLibParser, 
+        image_handler: ImageHandler,
+        novel_info: Dict[str, Any]
+    ):
+        """Устанавливает компоненты API для работы с предпросмотром"""
+        self.api = api
+        self.parser = parser
+        self.image_handler = image_handler
+        self.novel_info = novel_info
 
     def set_team_colors(self, colors: Dict[str, str]):
         """Установка словаря цветов для команд."""
@@ -315,6 +340,31 @@ class ChapterTree(QTreeWidget):
 
         if viewport := self.viewport():
             viewport.update()
+
+    def _on_item_double_clicked(self, item: QTreeWidgetItem, column: int):
+        """Обработка двойного клика по элементу"""
+        if not self.api or not self.parser or not self.image_handler or not self.novel_info:
+            return
+        
+        chapter_data = item.data(0, Qt.ItemDataRole.UserRole)
+        branch_id = item.data(1, Qt.ItemDataRole.UserRole)
+        
+        if not chapter_data or branch_id is None:
+            return
+        
+        try:
+            preview_dialog = PreviewDialog(
+                novel_info=self.novel_info,
+                chapter_info=chapter_data,
+                branch_id=str(branch_id),
+                api=self.api,
+                parser=self.parser,
+                image_handler=self.image_handler,
+                parent=self.window()
+            )
+            preview_dialog.show()
+        except Exception as e:
+            print(f"Ошибка при открытии предпросмотра: {e}")
 
     def _show_context_menu(self, position):
         """Показывает контекстное меню для дерева глав."""

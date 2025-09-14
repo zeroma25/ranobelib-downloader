@@ -332,4 +332,20 @@ QPushButton#selectDefaultButton:pressed,
 QPushButton#deselectAllButton:pressed {
     padding-top: 3px;       /* смещение вниз */
     padding-bottom: 1px;    /* компенсируем высоту */
+}
+
+/* Стили для диалога предпросмотра */
+QDialog#previewDialog {
+    background-color: #2d2d2d;
+}
+
+/* Кнопки управления шрифтом в предпросмотре */
+QDialog#previewDialog QPushButton {
+    min-width: 20px;
+    padding: 4px 8px;
+}
+
+QDialog#previewDialog QLabel {
+    color: #b0b0b0;
+    font-weight: bold;
 } 
