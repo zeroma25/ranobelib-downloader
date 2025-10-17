@@ -9,6 +9,7 @@ from typing import Optional, Tuple
 
 import requests
 from PIL import Image
+from urllib.parse import urlparse
 
 from .api import RanobeLibAPI
 
@@ -88,6 +89,14 @@ class ImageHandler:
         """Скачивание содержимого изображения и его Content-Type."""
         if url.startswith("/"):
             url = self.api.site_url.rstrip("/") + url
+
+        try:
+            site_netloc = urlparse(self.api.site_url).netloc
+            target_netloc = urlparse(url).netloc
+            if site_netloc and target_netloc and target_netloc == site_netloc:
+                self.api.wait_for_rate_limit()
+        except Exception:
+            pass
 
         response = self.api.session.get(url, timeout=10)
         response.raise_for_status()

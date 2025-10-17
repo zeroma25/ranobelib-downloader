@@ -67,7 +67,7 @@ class RanobeLibAPI:
     ) -> Dict[str, Any]:
         """Выполнение запроса к API с контролем частоты, обработкой ошибок и повторными попытками."""
         self.cancellation_event.clear()
-        self._wait_for_rate_limit(upcoming_requests=upcoming_requests)
+        self.wait_for_rate_limit(upcoming_requests=upcoming_requests)
 
         if not retry:
             try:
@@ -150,17 +150,7 @@ class RanobeLibAPI:
         data = self.make_request(url, retry=False)
         return data.get("data", {})
 
-    def _interruptible_sleep(self, duration: float):
-        """Приостанавливает выполнение на заданное время, но может быть прервано событием отмены."""
-        if duration <= 0:
-            return
-
-        end_time = time.monotonic() + duration
-        while time.monotonic() < end_time:
-            if self.cancellation_event.wait(timeout=0.1):
-                raise OperationCancelledError("Операция отменена")
-
-    def _wait_for_rate_limit(self, upcoming_requests: int = 0) -> None:
+    def wait_for_rate_limit(self, upcoming_requests: int = 0) -> None:
         """Динамическая задержка для соблюдения лимита и равномерного распределения запросов."""
         current_time = time.monotonic()
 
@@ -191,6 +181,16 @@ class RanobeLibAPI:
                 self._interruptible_sleep(wait_time)
 
         self.request_timestamps.append(time.monotonic())
+
+    def _interruptible_sleep(self, duration: float):
+        """Приостанавливает выполнение на заданное время, но может быть прервано событием отмены."""
+        if duration <= 0:
+            return
+
+        end_time = time.monotonic() + duration
+        while time.monotonic() < end_time:
+            if self.cancellation_event.wait(timeout=0.1):
+                raise OperationCancelledError("Операция отменена")
 
     def _retry_request(self, func: Callable, *args, **kwargs) -> Dict[str, Any]:
         """Выполнение функции с повторными попытками."""
