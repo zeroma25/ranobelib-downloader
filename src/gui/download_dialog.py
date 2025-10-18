@@ -209,6 +209,7 @@ class DownloadWorker(QThread):
                 filename = creator.create(self.novel_info, self.prepared_chapters, None)
 
                 if self.save_dir and os.path.exists(filename):
+                    os.makedirs(self.save_dir, exist_ok=True)
                     new_path = os.path.join(self.save_dir, os.path.basename(filename))
                     if os.path.abspath(filename) != os.path.abspath(new_path):
                         shutil.move(filename, new_path)

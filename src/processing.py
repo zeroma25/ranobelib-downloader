@@ -129,6 +129,7 @@ class ContentProcessor:
     def prepare_dirs(self, novel_id: Any) -> Tuple[str, str]:
         """Подготовка каталога загрузок и временного каталога."""
         downloads_dir = settings.get("save_directory")
+        os.makedirs(downloads_dir, exist_ok=True)
         temp_dir = os.path.join(USER_DATA_DIR, "temp")
         os.makedirs(temp_dir, exist_ok=True)
         image_folder = os.path.join(temp_dir, f"images_{novel_id}")
@@ -138,6 +139,7 @@ class ContentProcessor:
         """Создание безопасного имени файла и обеспечение его уникальности."""
         safe_title = re.sub(r'[\\/*?:"<>|]', "", title)
         downloads_dir = settings.get("save_directory")
+        os.makedirs(downloads_dir, exist_ok=True)
         filename = os.path.join(downloads_dir, f"{safe_title}.{extension}")
         counter = 1
         while os.path.exists(filename):
