@@ -7,8 +7,10 @@ import hashlib
 import json
 import os
 import secrets
+import sys
 import threading
 import time
+import platform
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
@@ -161,52 +163,112 @@ class RanobeLibAuth:
         """Открытие webview для получения кода авторизации."""
         print("🔐 Открываем окно авторизации...")
 
-        auth_code_container: Dict[str, Optional[str]] = {"code": None}
-        window_ready = threading.Event()
+        if platform.system() == "Windows":
+            # --- ОРИГИНАЛЬНЫЙ КОД ДЛЯ WINDOWS (через pywebview) ---
+            auth_code_container: Dict[str, Optional[str]] = {"code": None}
+            window_ready = threading.Event()
 
-        def on_loaded():
-            """Сигнализирование, что окно готово к работе."""
-            window_ready.set()
+            def on_loaded():
+                window_ready.set()
 
-        def _watch_redirect():
-            """Отслеживание URL в webview и извлечение кода авторизации."""
-            window_ready.wait()
+            def _watch_redirect():
+                window_ready.wait()
 
-            while not auth_code_container["code"]:
-                try:
-                    current_url = window.get_current_url()
-                    if current_url is None:
+                while not auth_code_container["code"]:
+                    try:
+                        current_url = window.get_current_url()
+                        if current_url is None:
+                            break
+
+                        if current_url.startswith(redirect_uri):
+                            parsed_url = urlparse(current_url)
+                            query_params = parse_qs(parsed_url.query)
+                            code = query_params.get("code", [None])[0]
+                            if code:
+                                auth_code_container["code"] = code
+                                window.destroy()
+                            break
+                    except Exception:
                         break
+                    time.sleep(0.5)
 
-                    if current_url.startswith(redirect_uri):
-                        parsed_url = urlparse(current_url)
+            window = webview.create_window(
+                "Авторизация RanobeLIB",
+                url=challenge_url,
+                width=650,
+                height=750,
+                resizable=True,
+            )
+            window.events.loaded += on_loaded
+
+            thread = threading.Thread(target=_watch_redirect, daemon=True)
+            thread.start()
+
+            webview.start(gui="edgechromium")
+
+            if not auth_code_container["code"]:
+                print("⚠️ Не удалось получить код авторизации. Вход отменён.")
+            return auth_code_container["code"]
+
+        else:
+            # --- НАТИВНОЕ ОКНО ДЛЯ LINUX (PyQt6) ---
+            try:
+                from PyQt6.QtWidgets import QDialog, QVBoxLayout, QApplication
+                from PyQt6.QtWebEngineWidgets import QWebEngineView
+                from PyQt6.QtCore import QUrl, QTimer
+
+                # Подхватываем уже существующий процесс интерфейса из gui.py
+                app = QApplication.instance()
+                if not app:
+                    app = QApplication(sys.argv if sys.argv else ["ranobelib-auth"])
+
+                # Создаем родное диалоговое окно Qt
+                dialog = QDialog()
+                dialog.setWindowTitle("Авторизация RanobeLIB")
+                dialog.resize(650, 750)
+
+                layout = QVBoxLayout(dialog)
+                layout.setContentsMargins(0, 0, 0, 0)
+
+                browser = QWebEngineView()
+                layout.addWidget(browser)
+
+                auth_code_container = {"code": None}
+
+                def on_url_changed(qurl: QUrl):
+                    """Функция, которая срабатывает моментально при любом изменении адреса."""
+                    url = qurl.toString()
+                    if url.startswith(redirect_uri):
+                        parsed_url = urlparse(url)
                         query_params = parse_qs(parsed_url.query)
                         code = query_params.get("code", [None])[0]
                         if code:
                             auth_code_container["code"] = code
-                            window.destroy()
-                        break
-                except Exception:
-                    break
-                time.sleep(0.5)
 
-        window = webview.create_window(
-            "Авторизация RanobeLIB",
-            url=challenge_url,
-            width=650,
-            height=750,
-            resizable=True,
-        )
-        window.events.loaded += on_loaded
+                            # Переводим на пустую страницу для мгновенного сброса сети
+                            browser.setUrl(QUrl("about:blank"))
 
-        thread = threading.Thread(target=_watch_redirect, daemon=True)
-        thread.start()
+                            # Даем движку 150 миллисекунд на отмену редиректа и безопасно закрываем окно
+                            QTimer.singleShot(150, dialog.accept)
 
-        webview.start(gui="edgechromium")
+                # Подключаем функцию отслеживания и загружаем страницу входа
+                browser.urlChanged.connect(on_url_changed)
+                browser.setUrl(QUrl(challenge_url))
 
-        if not auth_code_container["code"]:
-            print("⚠️ Не удалось получить код авторизации. Вход отменён.")
-        return auth_code_container["code"]
+                # dialog.exec() ставит код на паузу, ожидая входа,
+                # но ПРИ ЭТОМ поддерживает интерфейс всей остальной программы в рабочем состоянии!
+                dialog.exec()
+
+                if not auth_code_container["code"]:
+                    print("⚠️ Не удалось получить код авторизации. Вход отменён.")
+                return auth_code_container["code"]
+
+            except ImportError as e:
+                print(f"⚠️ Ошибка импорта: {e}. Убедитесь, что установлены PyQt6 и PyQt6-WebEngine")
+                return None
+            except Exception as e:
+                print(f"⚠️ Ошибка: {e}")
+                return None
 
     def _exchange_code_for_token(
         self, code: str, secret: str, redirect_uri: str
@@ -220,7 +282,17 @@ class RanobeLibAuth:
             "code_verifier": secret,
             "code": code,
         }
+
         headers = dict(self.api.session.headers)
+        headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "https://ranobelib.me",
+            "Referer": "https://ranobelib.me/",
+            "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+        })
 
         try:
             response = self.api.session.post(token_url, json=payload, headers=headers, timeout=10)
@@ -228,4 +300,6 @@ class RanobeLibAuth:
             return response.json()
         except requests.exceptions.RequestException as e:
             print(f"⚠️ Не удалось получить токен: {e}")
-            return None 
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"📄 Детали ответа сервера: {e.response.text}")
+            return None

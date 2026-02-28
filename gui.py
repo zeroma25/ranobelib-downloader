@@ -1,7 +1,7 @@
 """
 Скрипт для скачивания новелл с сайта RanobeLIB в режиме графического интерфейса.
 """
-
+import PyQt6.QtWebEngineWidgets
 from src.main import main
 
 

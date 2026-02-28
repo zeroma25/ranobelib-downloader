@@ -11,7 +11,7 @@ from .parser import RanobeLibParser
 from .processing import ContentProcessor
 from .settings import Settings, settings
 
-__version__ = "0.3"
+__version__ = "0.3.5"
 
 __all__ = [
     "ContentProcessor",

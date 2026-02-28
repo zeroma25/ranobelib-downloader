@@ -26,7 +26,7 @@
 - Python 3.10 или выше
 - Установленные зависимости из файла `requirements.txt`
 
-## Установка
+## Установка в Windows
 
 1. Клонировать репозиторий:
    ```bash
@@ -39,14 +39,30 @@
    pip install -r requirements.txt
    ```
 
+## Установка в Linux/MacOS
+
+1. Клонировать репозиторий:
+   ```bash
+   git clone https://github.com/zeroma25/ranobelib-downloader.git
+   cd ranobelib-downloader
+   chmod +x ranobelib-downloader-GUI.sh
+   ```
+
 ## Использование
 
 ### Графический интерфейс
 
 Запустите программу с графическим интерфейсом:
 
+### Windows
+
 ```bash
 python gui.py
+```
+### Linux/MacOS
+
+```bash
+   ./ranobelib-downloader-GUI.sh
 ```
 
 1. Вставьте URL новеллы в поле ввода
@@ -59,8 +75,16 @@ python gui.py
 
 Запустите программу в консольном режиме:
 
+### Windows
+
 ```bash
 python cli.py
+```
+
+### Linux/MacOS
+
+```bash
+   ./ranobelib-downloader-CLI.sh
 ```
 
 1. Следуйте инструкциям в консоли

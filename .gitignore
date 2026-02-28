@@ -1,0 +1,23 @@
+# Временные файлы компиляции Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Виртуальные окружения (самое важное!)
+venv/
+.venv/
+env/
+bin/
+lib/
+
+# Настройки VS Code
+.vscode/
+
+# Логи и временные файлы
+*.log
+.pytest_cache/
+.coverage
+
+# Авторизация
+user_data/
+downloads/
