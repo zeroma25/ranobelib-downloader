@@ -1,5 +1,5 @@
 """
-Модуль для аутентификации в API RanobeLIB
+Модуль для аутентификации в API RanobeLIB с защищенным хранением данных
 """
 
 import base64
@@ -14,17 +14,55 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 import webview
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
 
 from .api import RanobeLibAPI
 from .settings import USER_DATA_DIR
 
 
 class RanobeLibAuth:
-    """Класс для работы с аутентификацией в API RanobeLIB"""
+    """Класс для работы с аутентификацией в API RanobeLIB с защитой данных"""
 
     def __init__(self, api: RanobeLibAPI):
         self.api = api
         self.token_path = os.path.join(USER_DATA_DIR, "auth.json")
+        self.key_path = os.path.join(USER_DATA_DIR, ".auth_key")
+        self._cipher = self._initialize_cipher()
+
+    def _initialize_cipher(self) -> Fernet:
+        """Инициализация шифра Fernet с хранением ключа."""
+        if os.path.exists(self.key_path):
+            with open(self.key_path, "rb") as f:
+                key = f.read()
+        else:
+            key = Fernet.generate_key()
+            # Сохраняем ключ с ограниченными правами доступа
+            old_umask = os.umask(0o077)
+            try:
+                with open(self.key_path, "wb") as f:
+                    f.write(key)
+            finally:
+                os.umask(old_umask)
+        
+        return Fernet(key)
+
+    def _encrypt_data(self, data: Dict[str, Any]) -> str:
+        """Шифрование данных токена."""
+        json_str = json.dumps(data)
+        encrypted = self._cipher.encrypt(json_str.encode())
+        return base64.b64encode(encrypted).decode()
+
+    def _decrypt_data(self, encrypted_str: str) -> Optional[Dict[str, Any]]:
+        """Расшифровка данных токена."""
+        try:
+            encrypted = base64.b64decode(encrypted_str.encode())
+            decrypted = self._cipher.decrypt(encrypted)
+            return json.loads(decrypted.decode())
+        except Exception as e:
+            print(f"⚠️ Не удалось расшифровать данные токена: {e}")
+            return None
 
     def get_auth_code_via_webview(self) -> Optional[Dict[str, str]]:
         """Открытие окна webview для получения кода авторизации. Возвращает словарь с кодом и секретом."""
@@ -72,10 +110,17 @@ class RanobeLibAuth:
         return self.finish_authorization(auth_data)
 
     def save_token(self, token_data: Dict[str, Any]) -> None:
-        """Сохранение данных аутентификации в файл."""
+        """Сохранение данных аутентификации в зашифрованный файл."""
         try:
-            with open(self.token_path, "w", encoding="utf-8") as f:
-                json.dump(token_data, f, indent=2)
+            encrypted_data = self._encrypt_data(token_data)
+            # Сохраняем с ограниченными правами доступа
+            old_umask = os.umask(0o077)
+            try:
+                with open(self.token_path, "w", encoding="utf-8") as f:
+                    json.dump({"data": encrypted_data}, f)
+            finally:
+                os.umask(old_umask)
+            print("✅ Токен безопасно сохранён")
         except OSError as e:
             print(f"⚠️ Не удалось сохранить токен в файл: {e}")
 
@@ -94,8 +139,10 @@ class RanobeLibAuth:
         if os.path.exists(self.token_path):
             try:
                 with open(self.token_path, "r", encoding="utf-8") as f:
-                    token_data = json.load(f)
-                    return token_data
+                    file_data = json.load(f)
+                    encrypted_data = file_data.get("data")
+                    if encrypted_data:
+                        return self._decrypt_data(encrypted_data)
             except (OSError, json.JSONDecodeError) as e:
                 print(f"⚠️ Не удалось загрузить сохранённый токен: {e}")
         return None
@@ -228,4 +275,4 @@ class RanobeLibAuth:
             return response.json()
         except requests.exceptions.RequestException as e:
             print(f"⚠️ Не удалось получить токен: {e}")
-            return None 
+            return None
