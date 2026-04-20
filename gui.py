@@ -3,10 +3,12 @@
 """
 
 from src.main import main
+from src.sys_utils import setup_utf8_output
 
 
 def run():
     """Запуск основной функции для GUI с корректной обработкой принудительного прерывания."""
+    setup_utf8_output()
     try:
         main(use_gui=True)
     except KeyboardInterrupt:
