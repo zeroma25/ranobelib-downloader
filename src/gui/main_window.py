@@ -348,8 +348,8 @@ class MainWindow(QMainWindow):
                 details_html += f"<p><b>Теги:</b> {tags_text}</p>"
 
         raw_summary = self.novel_info.get("summary", "Описание отсутствует.")
-        decoded_summary = self.parser.decode_html_entities(raw_summary)
-        summary = decoded_summary.replace("\n", "<br>")
+        decoded_summary = self.parser.parse_summary(raw_summary)
+        summary = (decoded_summary or "Описание отсутствует.").replace("\n", "<br>")
         details_html += f'<div style="margin-top: 10px;"><b>Описание:</b><br/>{summary}</div>'
 
         cover_url = (self.novel_info.get("cover", {}) or {}).get("thumbnail")

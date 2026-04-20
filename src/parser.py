@@ -73,6 +73,31 @@ class RanobeLibParser:
             previous = decoded
         return previous
 
+    def parse_summary(self, summary_data: Any) -> str:
+        
+        # Преобразование описания из различных форматов (строка, словарь TipTap) в HTML-строку.
+        
+        if not summary_data:
+            return ""
+
+        if isinstance(summary_data, str):
+            return self.decode_html_entities(summary_data)
+
+        if isinstance(summary_data, dict):
+            # Если это формат TipTap (JSON документ)
+            if summary_data.get("type") == "doc" and summary_data.get("content"):
+                return self.json_to_html(summary_data["content"], [])
+            
+            # Если это локализованный объект, пытаемся взять русский или английский текст
+            for lang in ["ru", "en"]:
+                val = summary_data.get(lang)
+                if val and isinstance(val, str):
+                    return self.decode_html_entities(val)
+                if val and isinstance(val, dict):
+                    return self.parse_summary(val)
+
+        return self.decode_html_entities(str(summary_data))
+
     def _handle_simple_tag(
         self, element: Dict[str, Any], attachments: List[Dict[str, Any]], tag: str
     ) -> str:
