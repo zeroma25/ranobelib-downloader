@@ -347,9 +347,12 @@ class MainWindow(QMainWindow):
                 tags_text = ", ".join([f"#{name}" for name in tag_names])
                 details_html += f"<p><b>Теги:</b> {tags_text}</p>"
 
-        raw_summary = self.novel_info.get("summary", "Описание отсутствует.")
-        decoded_summary = self.parser.decode_html_entities(raw_summary)
-        summary = decoded_summary.replace("\n", "<br>")
+        summary = "Описание отсутствует."
+
+        raw_summary = self.novel_info.get("summary")
+        if raw_summary:
+            summary = self.parser.json_to_html(raw_summary.get("content", []), [])
+
         details_html += f'<div style="margin-top: 10px;"><b>Описание:</b><br/>{summary}</div>'
 
         cover_url = (self.novel_info.get("cover", {}) or {}).get("thumbnail")

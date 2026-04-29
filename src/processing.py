@@ -78,8 +78,9 @@ class ContentProcessor:
             author = novel_info["authors"][0].get("name", "")
 
         summary = ""
-        if novel_info.get("summary"):
-            summary = self.parser.decode_html_entities(novel_info["summary"].strip())
+        raw_summary = novel_info.get("summary")
+        if raw_summary:
+            summary = self.parser.json_to_html(raw_summary.get("content", []), [])
 
         genres: List[str] = []
         if novel_info.get("genres"):
