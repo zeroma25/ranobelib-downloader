@@ -79,7 +79,14 @@ class ContentProcessor:
 
         summary = ""
         if novel_info.get("summary"):
-            summary = self.parser.decode_html_entities(novel_info["summary"].strip())
+            raw_summary = novel_info["summary"]
+            # API может возвращать summary как dict (TipTap JSON) или как строку
+            if isinstance(raw_summary, dict):
+                summary_content = raw_summary.get("content", [])
+                attachments = novel_info.get("summary_attachments", [])
+                summary = self.parser.json_to_html(summary_content, attachments)
+            elif isinstance(raw_summary, str):
+                summary = self.parser.decode_html_entities(raw_summary.strip())
 
         genres: List[str] = []
         if novel_info.get("genres"):
