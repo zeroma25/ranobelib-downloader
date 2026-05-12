@@ -348,8 +348,17 @@ class MainWindow(QMainWindow):
                 details_html += f"<p><b>Теги:</b> {tags_text}</p>"
 
         raw_summary = self.novel_info.get("summary", "Описание отсутствует.")
-        decoded_summary = self.parser.decode_html_entities(raw_summary)
-        summary = decoded_summary.replace("\n", "<br>")
+        # API может возвращать summary как dict (TipTap JSON) или как строку
+        if isinstance(raw_summary, dict):
+            # Структурированный формат TipTap: {"type": "doc", "content": [...]}
+            summary_content = raw_summary.get("content", [])
+            attachments = self.novel_info.get("summary_attachments", [])
+            summary = self.parser.json_to_html(summary_content, attachments)
+        elif isinstance(raw_summary, str):
+            decoded_summary = self.parser.decode_html_entities(raw_summary)
+            summary = decoded_summary.replace("\n", "<br>")
+        else:
+            summary = "Описание отсутствует."
         details_html += f'<div style="margin-top: 10px;"><b>Описание:</b><br/>{summary}</div>'
 
         cover_url = (self.novel_info.get("cover", {}) or {}).get("thumbnail")
