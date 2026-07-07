@@ -119,7 +119,7 @@ class RanobeLibParser:
     def _handle_text(self, element: Dict[str, Any], attachments: List[Dict[str, Any]]) -> str:
         """Обработка текста."""
         text_val = element.get("text", "")
-        processed_text = re.sub(" +", " ", text_val.replace("\n", " "))
+        processed_text = re.sub(" +", " ", text_val.replace("\n", "<br>"))
         return self.decode_html_entities(processed_text)
 
     def _handle_default(self, element: Dict[str, Any], attachments: List[Dict[str, Any]]) -> str:

@@ -78,8 +78,16 @@ class ContentProcessor:
             author = novel_info["authors"][0].get("name", "")
 
         summary = ""
-        if novel_info.get("summary"):
-            summary = self.parser.decode_html_entities(novel_info["summary"].strip())
+        raw_summary = novel_info.get("summary")
+        if raw_summary:
+            if isinstance(raw_summary, dict):
+                if raw_summary.get("type") == "doc" and raw_summary.get("content"):
+                    raw_summary = self.parser.json_to_html(raw_summary["content"], [])
+                else:
+                    raw_summary = str(raw_summary)
+            elif not isinstance(raw_summary, str):
+                raw_summary = str(raw_summary)
+            summary = self.parser.decode_html_entities(raw_summary.strip())
 
         genres: List[str] = []
         if novel_info.get("genres"):

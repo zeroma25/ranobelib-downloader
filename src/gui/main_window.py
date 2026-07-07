@@ -348,9 +348,20 @@ class MainWindow(QMainWindow):
                 details_html += f"<p><b>Теги:</b> {tags_text}</p>"
 
         raw_summary = self.novel_info.get("summary", "Описание отсутствует.")
-        decoded_summary = self.parser.decode_html_entities(raw_summary)
+        if isinstance(raw_summary, dict):
+            if raw_summary.get("type") == "doc" and raw_summary.get("content"):
+                raw_summary = self.parser.json_to_html(raw_summary["content"], [])
+            else:
+                raw_summary = str(raw_summary)
+        elif not isinstance(raw_summary, str):
+            raw_summary = str(raw_summary)
+
+        decoded_summary = self.parser.decode_html_entities(raw_summary).strip()
+        decoded_summary = re.sub(r'^(?:<br\s*/?>\s*)+', '', decoded_summary, flags=re.IGNORECASE)
+        
         summary = decoded_summary.replace("\n", "<br>")
-        details_html += f'<div style="margin-top: 10px;"><b>Описание:</b><br/>{summary}</div>'
+        summary = summary.replace("<p>", '<p style="margin-top: 0px; margin-bottom: 5px;">')
+        details_html += f'<div style="margin-top: 10px;"><b>Описание:</b><div style="margin-top: 4px;">{summary}</div></div>'
 
         cover_url = (self.novel_info.get("cover", {}) or {}).get("thumbnail")
 
