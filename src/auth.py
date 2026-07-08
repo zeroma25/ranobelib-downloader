@@ -75,6 +75,79 @@ class RanobeLibAuth:
             return None
         return self.finish_authorization(auth_data)
 
+    def get_auth_code_via_cli(self) -> Optional[Dict[str, str]]:
+        """Получение кода авторизации через консоль (копирование ссылки)."""
+        secret = self._generate_random_string(128)
+        state = self._generate_random_string(40)
+        redirect_uri = f"{self.api.site_url}/ru/front/auth/oauth/callback"
+        challenge = self._code_challenge(secret)
+
+        challenge_url = (
+            "https://auth.lib.social/auth/oauth/authorize?scope=&client_id=1&response_type=code"
+            f"&redirect_uri={redirect_uri}&state={state}&code_challenge={challenge}"
+            "&code_challenge_method=S256&prompt=consent"
+        )
+
+        print("\n" + "═" * 60)
+        print("🔐 АВТОРИЗАЦИЯ")
+        print("\nСпособ 1 (Токен напрямую - Рекомендуется):")
+        print("1. Зайдите на сайт https://ranobelib.me и авторизуйтесь.")
+        print("2. Откройте Инструменты разработчика (F12) -> вкладка Network (Сеть).")
+        print("3. Включите фильтр 'Fetch/XHR' и обновите страницу (F5).")
+        print("4. Кликните на любой успешный GET запрос (например, 'me' или 'count').")
+        print("5. В разделе Request Headers (Заголовки запроса) найдите 'Authorization: Bearer <ваш-токен>'.")
+        print("6. Скопируйте этот длинный токен (всё что идет после слова Bearer) и вставьте ниже.")
+        
+        print("\nСпособ 2 (Перехват ссылки с кодом):")
+        print("1. Откройте Инструменты разработчика (F12) -> вкладка Network (Сеть).")
+        print("2. Включите 'Preserve log / Persist Logs' (Сохранять журнал / Непрерывные логи).")
+        print(f"3. Откройте ссылку:\n   {challenge_url}")
+        print("4. После авторизации найдите в списке запрос 'callback?code=' и скопируйте его URL.")
+        print("═" * 60 + "\n")
+
+        user_input = input("🔗 Вставьте токен ИЛИ ссылку с кодом: ").strip()
+        if not user_input:
+            return None
+
+        if user_input.lower().startswith("bearer "):
+            user_input = user_input[7:].strip()
+
+        if "://" not in user_input and "code=" not in user_input and len(user_input) > 40:
+            return {"direct_token": user_input}
+
+        code = user_input
+        if "code=" in user_input:
+            try:
+                parsed_url = urlparse(user_input)
+                query_params = parse_qs(parsed_url.query)
+                extracted_code = query_params.get("code", [None])[0]
+                if extracted_code:
+                    code = extracted_code
+            except Exception:
+                pass
+
+        return {"code": code, "secret": secret, "redirect_uri": redirect_uri}
+
+    def authorize_with_cli(self) -> Optional[str]:
+        """Консольный процесс авторизации."""
+        auth_data = self.get_auth_code_via_cli()
+        if not auth_data:
+            return None
+            
+        if "direct_token" in auth_data:
+            token = auth_data["direct_token"]
+            self.api.set_token(token)
+            if self.validate_token():
+                self.save_token({"access_token": token})
+                print("✅ Токен успешно сохранён")
+                return token
+            else:
+                print("⚠️ Введенный токен недействителен")
+                self.api.clear_token()
+                return None
+
+        return self.finish_authorization(auth_data)
+
     def save_token(self, token_data: Dict[str, Any]) -> None:
         """Сохранение данных аутентификации (keyring с фолбэком на файл)."""
         saved_to_keyring = False
