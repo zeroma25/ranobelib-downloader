@@ -12,6 +12,8 @@ import time
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
+import keyring
+import keyring.errors
 import requests
 import webview
 
@@ -24,7 +26,9 @@ class RanobeLibAuth:
 
     def __init__(self, api: RanobeLibAPI):
         self.api = api
-        self.token_path = os.path.join(USER_DATA_DIR, "auth.json")
+        self.keyring_service = "ranobelib-downloader"
+        self.keyring_username = "auth_token"
+        self.fallback_token_path = os.path.join(USER_DATA_DIR, "auth.json")
 
     def get_auth_code_via_webview(self) -> Optional[Dict[str, str]]:
         """Открытие окна webview для получения кода авторизации. Возвращает словарь с кодом и секретом."""
@@ -72,33 +76,93 @@ class RanobeLibAuth:
         return self.finish_authorization(auth_data)
 
     def save_token(self, token_data: Dict[str, Any]) -> None:
-        """Сохранение данных аутентификации в файл."""
+        """Сохранение данных аутентификации (keyring с фолбэком на файл)."""
+        saved_to_keyring = False
         try:
-            with open(self.token_path, "w", encoding="utf-8") as f:
-                json.dump(token_data, f, indent=2)
-        except OSError as e:
-            print(f"⚠️ Не удалось сохранить токен в файл: {e}")
+            token_json = json.dumps(token_data)
+            chunk_size = 1000
+            chunks = [token_json[i:i + chunk_size] for i in range(0, len(token_json), chunk_size)]
+            
+            keyring.set_password(self.keyring_service, f"{self.keyring_username}_count", str(len(chunks)))
+            for i, chunk in enumerate(chunks):
+                keyring.set_password(self.keyring_service, f"{self.keyring_username}_{i}", chunk)
+            saved_to_keyring = True
+        except Exception as e:
+            print(f"⚠️ Не удалось сохранить токен в keyring (используем фолбэк): {e}")
+
+        if not saved_to_keyring:
+            try:
+                with open(self.fallback_token_path, "w", encoding="utf-8") as f:
+                    json.dump(token_data, f, indent=2)
+            except OSError as e:
+                print(f"⚠️ Фолбэк также не удался. Не удалось сохранить токен в файл: {e}")
 
     def logout(self) -> None:
-        """Выход из системы: удаление токена и очистка данных."""
+        """Выход из системы: удаление токена из всех хранилищ."""
         self.api.clear_token()
-        if os.path.exists(self.token_path):
+        
+        try:
             try:
-                os.remove(self.token_path)
-                print("🗑️ Файл токена удален.")
+                keyring.delete_password(self.keyring_service, self.keyring_username)
+            except keyring.errors.PasswordDeleteError:
+                pass
+
+            count_str = keyring.get_password(self.keyring_service, f"{self.keyring_username}_count")
+            if count_str:
+                for i in range(int(count_str)):
+                    try:
+                        keyring.delete_password(self.keyring_service, f"{self.keyring_username}_{i}")
+                    except keyring.errors.PasswordDeleteError:
+                        pass
+                try:
+                    keyring.delete_password(self.keyring_service, f"{self.keyring_username}_count")
+                except keyring.errors.PasswordDeleteError:
+                    pass
+            print("🗑️ Токен удален из keyring (если был).")
+        except Exception as e:
+            print(f"⚠️ Ошибка при удалении токена из keyring: {e}")
+
+        if os.path.exists(self.fallback_token_path):
+            try:
+                os.remove(self.fallback_token_path)
+                print("🗑️ Файл токена (фолбэк) удален.")
             except OSError as e:
                 print(f"⚠️ Не удалось удалить файл токена: {e}")
 
     def load_token(self) -> Optional[Dict[str, Any]]:
-        """Загрузка сохранённых данных аутентификации, если они существуют."""
-        if os.path.exists(self.token_path):
+        """Загрузка данных аутентификации (keyring -> фолбэк-файл)."""
+        token_data = None
+        
+        try:
+            count_str = keyring.get_password(self.keyring_service, f"{self.keyring_username}_count")
+            if count_str:
+                token_json = ""
+                for i in range(int(count_str)):
+                    chunk = keyring.get_password(self.keyring_service, f"{self.keyring_username}_{i}")
+                    if chunk is not None:
+                        token_json += chunk
+                if token_json:
+                    token_data = json.loads(token_json)
+        except Exception as e:
+            print(f"⚠️ Ошибка доступа к keyring при загрузке: {e}")
+
+        if not token_data and os.path.exists(self.fallback_token_path):
             try:
-                with open(self.token_path, "r", encoding="utf-8") as f:
+                with open(self.fallback_token_path, "r", encoding="utf-8") as f:
                     token_data = json.load(f)
-                    return token_data
+                    
+                if token_data:
+                    try:
+                        self.save_token(token_data)
+                        if keyring.get_password(self.keyring_service, f"{self.keyring_username}_count"):
+                            os.remove(self.fallback_token_path)
+                            print("✅ Токен успешно мигрирован из auth.json в keyring. Файл удален.")
+                    except Exception as e:
+                        print(f"⚠️ Миграция в keyring не удалась (продолжаем использовать файл): {e}")
             except (OSError, json.JSONDecodeError) as e:
-                print(f"⚠️ Не удалось загрузить сохранённый токен: {e}")
-        return None
+                print(f"⚠️ Не удалось загрузить токен из файла: {e}")
+
+        return token_data
 
     def refresh_token(self) -> bool:
         """Обновление access-токена с помощью refresh-токена."""
