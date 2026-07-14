@@ -56,11 +56,9 @@ class ContentProcessor:
         from tqdm import tqdm
 
         prepared: List[Dict[str, Any]] = []
-        total_chapters = len(filtered)
         for i, ch_data in enumerate(tqdm(filtered, desc="⏱️ Загрузка глав", unit="ch")):
-            remaining_requests = total_chapters - (i + 1)
             prepared.append(
-                self._process_single_chapter(ch_data, novel_info, image_folder, remaining_requests)
+                self._process_single_chapter(ch_data, novel_info, image_folder)
             )
 
         self._global_cache[cache_key] = prepared
@@ -286,7 +284,6 @@ class ContentProcessor:
         volume: str,
         number: str,
         branch_id: str,
-        upcoming_requests: int = 0,
     ) -> str:
         """Получение HTML-контента главы (без обработки изображений)."""
         chapter_data = self.api.get_chapter_content(
@@ -294,7 +291,6 @@ class ContentProcessor:
             volume,
             number,
             branch_id if branch_id != "0" else None,
-            upcoming_requests=upcoming_requests,
         )
 
         html = ""
@@ -323,7 +319,6 @@ class ContentProcessor:
         ch_data: Dict[str, Any],
         novel_info: Dict[str, Any],
         image_folder: str,
-        upcoming_requests: int = 0,
     ) -> Dict[str, Any]:
         """Загрузка и обработка одной главы."""
         ch_info = ch_data["chapter"]
@@ -373,7 +368,7 @@ class ContentProcessor:
                         del self.image_handler.image_counters[prefix]
 
         if processed_html is None:
-            raw_html = self._fetch_chapter_html(novel_info, volume, number, branch_id, upcoming_requests)
+            raw_html = self._fetch_chapter_html(novel_info, volume, number, branch_id)
             processed_html = self._prepare_chapter_content(raw_html, image_folder, branch_id)
             if self.cache_chapters:
                 self.cache.save_chapter(

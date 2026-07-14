@@ -166,7 +166,6 @@ class DownloadWorker(QThread):
                 {"chapter": chapter_info, "branch": branch_info},
                 self.novel_info,
                 self._temp_dir,
-                total_chapters - (i + 1),
             )
 
             self.prepared_chapters.append(prepared_chapter)

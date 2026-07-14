@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 import requests
 
-REQUESTS_LIMIT = 90
+DEFAULT_REQUESTS_LIMIT = 90
 REQUESTS_PERIOD = 60
 REQUEST_TIMEOUT = 10
 RETRY_DELAYS = [3, 3, 30, 30, 30]
@@ -35,7 +35,9 @@ class RanobeLibAPI:
                 "Site-Id": "3",
             }
         )
-        self.request_timestamps: Deque[float] = deque()
+        self.rate_limit = DEFAULT_REQUESTS_LIMIT
+        self.rate_remaining = DEFAULT_REQUESTS_LIMIT
+        self.window_start_time = time.monotonic()
         self.token_refresh_callback: Optional[Callable[[], bool]] = None
         self.cancellation_event = threading.Event()
 
@@ -63,11 +65,10 @@ class RanobeLibAPI:
         url: str,
         params: Optional[Dict[str, Any]] = None,
         retry: bool = True,
-        upcoming_requests: int = 0,
     ) -> Dict[str, Any]:
         """Выполнение запроса к API с контролем частоты, обработкой ошибок и повторными попытками."""
         self.cancellation_event.clear()
-        self.wait_for_rate_limit(upcoming_requests=upcoming_requests)
+        self.wait_for_rate_limit()
 
         if not retry:
             try:
@@ -133,7 +134,6 @@ class RanobeLibAPI:
         volume: str,
         number: str,
         branch_id: Optional[str] = None,
-        upcoming_requests: int = 0,
     ) -> Dict[str, Any]:
         """Получение содержимого главы."""
         url = f"{self.api_url}{slug}/chapter"
@@ -141,7 +141,7 @@ class RanobeLibAPI:
         if branch_id:
             params["branch_id"] = branch_id
 
-        data = self.make_request(url, params=params, upcoming_requests=upcoming_requests)
+        data = self.make_request(url, params=params)
         return data.get("data", {})
 
     def get_current_user(self) -> Dict[str, Any]:
@@ -150,37 +150,21 @@ class RanobeLibAPI:
         data = self.make_request(url, retry=False)
         return data.get("data", {})
 
-    def wait_for_rate_limit(self, upcoming_requests: int = 0) -> None:
-        """Динамическая задержка для соблюдения лимита и равномерного распределения запросов."""
-        current_time = time.monotonic()
-
-        while self.request_timestamps and self.request_timestamps[0] < current_time - REQUESTS_PERIOD:
-            self.request_timestamps.popleft()
-
-        requests_in_period = len(self.request_timestamps)
-
-        if requests_in_period + upcoming_requests + 1 <= REQUESTS_LIMIT:
-            self.request_timestamps.append(time.monotonic())
-            return
-
-        if requests_in_period >= REQUESTS_LIMIT:
-            wait_for_slot = self.request_timestamps[0] - (current_time - REQUESTS_PERIOD)
-            if wait_for_slot > 0:
-                self._interruptible_sleep(wait_for_slot)
-
-            current_time = time.monotonic()
-            while self.request_timestamps and self.request_timestamps[0] < current_time - REQUESTS_PERIOD:
-                self.request_timestamps.popleft()
-            requests_in_period = len(self.request_timestamps)
-
-        if self.request_timestamps:
-            interval = REQUESTS_PERIOD / REQUESTS_LIMIT
-            next_allowed_time = self.request_timestamps[-1] + interval
-            wait_time = next_allowed_time - current_time
+    def wait_for_rate_limit(self) -> None:
+        """Динамическая задержка на основе реальных заголовков сервера."""
+        if self.rate_remaining <= 2:
+            elapsed = time.monotonic() - self.window_start_time
+            wait_time = REQUESTS_PERIOD - elapsed
             if wait_time > 0:
                 self._interruptible_sleep(wait_time)
-
-        self.request_timestamps.append(time.monotonic())
+            self.window_start_time = time.monotonic()
+            
+        elif self.rate_remaining <= 10:
+            elapsed = time.monotonic() - self.window_start_time
+            remaining_time = REQUESTS_PERIOD - elapsed
+            if remaining_time > 0:
+                delay = remaining_time / self.rate_remaining
+                self._interruptible_sleep(delay)
 
     def _interruptible_sleep(self, duration: float):
         """Приостанавливает выполнение на заданное время, но может быть прервано событием отмены."""
@@ -216,6 +200,17 @@ class RanobeLibAPI:
         """Непосредственное выполнение запроса и обработка ответа."""
         try:
             response = self.session.get(url, params=params, timeout=REQUEST_TIMEOUT)
+
+            limit_header = response.headers.get("X-RateLimit-Limit")
+            if limit_header and limit_header.isdigit():
+                self.rate_limit = int(limit_header)
+
+            remaining_header = response.headers.get("X-RateLimit-Remaining")
+            if remaining_header and remaining_header.isdigit():
+                new_remaining = int(remaining_header)
+                if new_remaining > self.rate_remaining:
+                    self.window_start_time = time.monotonic()
+                self.rate_remaining = new_remaining
 
             if response.status_code == 401 and self.token_refresh_callback:
                 print("\n🔑 Токен недействителен. Попытка обновления...")
