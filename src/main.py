@@ -48,6 +48,7 @@ def run_cli():
 
     def signal_handler(sig, frame):
         api.cancel_pending_requests()
+        raise OperationCancelledError("Операция отменена пользователем")
 
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -121,7 +122,7 @@ def run_cli():
                 creator.prepare_chapters(novel_info, chapters_data, selected_branch_id, image_folder)
                 print("✅ Главы успешно загружены в кэш")
             except OperationCancelledError:
-                pass
+                raise
             except Exception as e:
                 print(f"❌ Ошибка при загрузке глав: {e}")
         elif selected_creators:
@@ -131,6 +132,8 @@ def run_cli():
                 selected_branch_id,
                 selected_creators,
             )
+    except OperationCancelledError:
+        print("\n⛔️ Прервано пользователем.")
     finally:
         _cleanup_temp_folder(novel_info.get("id"))
 

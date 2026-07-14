@@ -67,8 +67,13 @@ class RanobeLibAPI:
         retry: bool = True,
     ) -> Dict[str, Any]:
         """Выполнение запроса к API с контролем частоты, обработкой ошибок и повторными попытками."""
-        self.cancellation_event.clear()
+        if self.cancellation_event.is_set():
+            raise OperationCancelledError("Операция отменена")
+            
         self.wait_for_rate_limit()
+        
+        if self.cancellation_event.is_set():
+            raise OperationCancelledError("Операция отменена")
 
         if not retry:
             try:
