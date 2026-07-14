@@ -131,25 +131,27 @@ class ImageHandler:
         return final_name
 
     def _fetch_image(self, url: str) -> Tuple[bytes, Optional[str]]:
-        """Скачивание содержимого изображения и его Content-Type."""
-        if url.startswith("/"):
-            url = self.api.site_url.rstrip("/") + url
+        """Скачивание содержимого изображения и его Content-Type с повторными попытками."""
+        def fetch():
+            full_url = self.api.site_url.rstrip("/") + url if url.startswith("/") else url
 
-        try:
-            site_netloc = urlparse(self.api.site_url).netloc
-            target_netloc = urlparse(url).netloc
-            if site_netloc and target_netloc and target_netloc == site_netloc:
-                self.api.wait_for_rate_limit()
-        except Exception:
-            pass
+            try:
+                site_netloc = urlparse(self.api.site_url).netloc
+                target_netloc = urlparse(full_url).netloc
+                if site_netloc and target_netloc and target_netloc == site_netloc:
+                    self.api.wait_for_rate_limit()
+            except Exception:
+                pass
 
-        if self.api.cancellation_event.is_set():
-            raise OperationCancelledError
+            if self.api.cancellation_event.is_set():
+                raise OperationCancelledError
 
-        response = self.api.session.get(url, timeout=10)
-        response.raise_for_status()
-        content_type = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
-        return response.content, content_type
+            response = self.api.session.get(full_url, timeout=10)
+            response.raise_for_status()
+            content_type = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
+            return response.content, content_type
+            
+        return self.api._retry_request(fetch)
 
     def _get_extension_from_content_type(self, content_type: Optional[str]) -> str:
         """Определение расширения файла на основе MIME-типа."""

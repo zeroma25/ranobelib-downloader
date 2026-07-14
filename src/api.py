@@ -81,7 +81,8 @@ class RanobeLibAPI:
             except requests.exceptions.RequestException:
                 return {}
 
-        return self._retry_request(self._perform_request, url, params)
+        res = self._retry_request(self._perform_request, url, params)
+        return res if res is not None else {}
 
     def extract_slug_from_url(self, url: str) -> Optional[str]:
         """Извлечение slug из URL новеллы."""
@@ -193,7 +194,7 @@ class RanobeLibAPI:
             if self.cancellation_event.wait(timeout=0.1):
                 raise OperationCancelledError("Операция отменена")
 
-    def _retry_request(self, func: Callable, *args, **kwargs) -> Dict[str, Any]:
+    def _retry_request(self, func: Callable, *args, **kwargs) -> Any:
         """Выполнение функции с повторными попытками."""
         for i, delay in enumerate(RETRY_DELAYS):
             try:
@@ -211,7 +212,7 @@ class RanobeLibAPI:
 
                 self._interruptible_sleep(delay)
 
-        return {}
+        return None
 
     def _perform_request(self, url: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Непосредственное выполнение запроса и обработка ответа."""
