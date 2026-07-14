@@ -56,7 +56,7 @@ class ContentProcessor:
         from tqdm import tqdm
 
         prepared: List[Dict[str, Any]] = []
-        for i, ch_data in enumerate(tqdm(filtered, desc="⏱️ Загрузка глав", unit="ch")):
+        for i, ch_data in enumerate(tqdm(filtered, desc="⏱️ Загрузка глав", unit="ch", miniters=1, smoothing=0.1)):
             prepared.append(
                 self._process_single_chapter(ch_data, novel_info, image_folder)
             )
