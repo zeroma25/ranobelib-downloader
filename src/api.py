@@ -128,7 +128,19 @@ class RanobeLibAPI:
                 for branch in branches
             )
 
-            if not is_on_moderation:
+            if is_on_moderation:
+                continue
+                
+            valid_branches = []
+            for branch in branches:
+                if isinstance(branch, dict):
+                    restricted = branch.get("restricted_view")
+                    if restricted and restricted.get("is_open") is False:
+                        continue
+                valid_branches.append(branch)
+
+            if valid_branches:
+                chapter["branches"] = valid_branches
                 filtered_chapters.append(chapter)
 
         return filtered_chapters
