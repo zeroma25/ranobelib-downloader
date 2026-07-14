@@ -5,7 +5,9 @@
 from typing import Any, Dict, List, Optional
 
 from PyQt6.QtCore import QTimer, Qt, QVariant, pyqtSignal
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import QMenu, QTreeWidgetItem, QTreeWidgetItemIterator, QTreeWidget
+import base64
 
 from ..api import RanobeLibAPI
 from ..img import ImageHandler
@@ -47,6 +49,11 @@ class ChapterTree(QTreeWidget):
         self.customContextMenuRequested.connect(self._show_context_menu)
         
         self.itemDoubleClicked.connect(self._on_item_double_clicked)
+        
+        cache_icon_b64 = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAAsTAAALEwEAmpwYAAACc0lEQVR4nO1WOYgUURBtL0RXVDQZRMU1F1FEUVcQ3dQLj2SFZVFQgw00EWST2XRVzMw8EMxExUAzNfTKPAcWoe223vvdzKDgEahfiqmFoZnZ6Z6dFYR5UMHU+eb/6qofBD308D/Cez+HZInkRpOS6ma9MOvFrgKISfpGMZ3aNnS9cLVaXQbgJoDfAH4BeEJynOQZk3EAT82mPtfTNF3aleIA1pN8C+APgGtRFK1p5RvH8VoAN9SX5BsR6Z9R8TAMVwCokPxG8kjeOOfcMY0B8KFWqy3vmADJ+3ak+1vYh1Wa2QActNg7HRUXkd3WYJda+QB4qTLNH7iiOZxzuwoTIPkAwBe9hk4JRFG0EsBXPcmixZeQ/EHy1nR+7QhYrtskv4tIXxECA3b8w20IvMhBYMRy7chNwDl31IbL3kzBIe/9/AyBV1O/1QbgeCZm0Ajk/ooCTWJBA1M6EdlnuruVSmVhloDqSN5TH/XNnmaWWDsCg1nWOusBTFiyh2EYLiL5XAnEcbwYwCOzTTTuBZsJSmpPbgJpmq62aXYxayNZNnKPddoBeK9j2HTlJv6XNVeSJKtyE1Boc5Gc9N7PCzIgeT67jFSX9dNYkh/1pIKiYH3JaOKRFvZR2w96UqPNfETkhF3LqcIEvPcLbA84EVnXzAfASZUWxftJJgDeNX45hSAiW20gvda+yBunG1P7QwdQkiRbgpnA1WfCTwCfARxo5w/gEADRGJKHg26A5E4AkfXEMwBnnXOb7FlWcs5tBnBOm83u/BOA7UE3ISJ9AMaaPccan2UALuhcCGYL3vu5IrINwGmbCWXtcu2Xf/Iw7aGHoMv4C3o9+FwPrwvXAAAAAElFTkSuQmCC"
+        pixmap = QPixmap()
+        pixmap.loadFromData(base64.b64decode(cache_icon_b64))
+        self.cache_icon = QIcon(pixmap)
 
     def set_api_components(
         self, 
@@ -71,6 +78,14 @@ class ChapterTree(QTreeWidget):
         """Обновление дерева глав на основе данных о томах и главах"""
         self.chapters_state = chapters_state.copy() if chapters_state else {}
         self.clear()
+        
+        cached_chapters = set()
+        if self.novel_info:
+            try:
+                from ..cache import ChapterCache
+                cached_chapters = ChapterCache().get_cached_chapters(str(self.novel_info.get("id")))
+            except Exception:
+                pass
 
         for vol_num in sorted(volumes_data.keys(), key=lambda x: int(x) if x.isdigit() else 0):
             vol_name = f"Том {vol_num}" if vol_num != "0" else "Том не указан"
@@ -119,6 +134,10 @@ class ChapterTree(QTreeWidget):
                     ch_item.setData(0, Qt.ItemDataRole.UserRole, QVariant(chapter))
                     ch_item.setData(1, Qt.ItemDataRole.UserRole, QVariant(branch_id))
 
+                    if (str(branch_id), str(chapter.get("volume", "0")), str(chapter.get("number", "0"))) in cached_chapters:
+                        ch_item.setIcon(0, self.cache_icon)
+                        ch_item.setToolTip(0, "Сохранено в кэш")
+
                     vol_item.addChild(ch_item)
                 else:
                     ch_item = QTreeWidgetItem([chapter_title])
@@ -151,6 +170,10 @@ class ChapterTree(QTreeWidget):
 
                         translation_item.setData(0, Qt.ItemDataRole.UserRole, QVariant(chapter))
                         translation_item.setData(1, Qt.ItemDataRole.UserRole, QVariant(branch_id))
+                        
+                        if (str(branch_id), str(chapter.get("volume", "0")), str(chapter.get("number", "0"))) in cached_chapters:
+                            translation_item.setIcon(0, self.cache_icon)
+                            translation_item.setToolTip(0, "Сохранено в кэш")
 
                         ch_item.addChild(translation_item)
 
@@ -362,6 +385,13 @@ class ChapterTree(QTreeWidget):
                 image_handler=self.image_handler,
                 parent=self.window()
             )
+            
+            def on_chapter_cached(n_id, b_id, vol, num):
+                if str(b_id) == str(branch_id) and str(vol) == str(chapter_data.get("volume", "0")) and str(num) == str(chapter_data.get("number", "0")):
+                    item.setIcon(0, self.cache_icon)
+                    item.setToolTip(0, "Сохранено в кэш")
+                    
+            preview_dialog.chapter_cached.connect(on_chapter_cached)
             preview_dialog.show()
         except Exception as e:
             print(f"Ошибка при открытии предпросмотра: {e}")

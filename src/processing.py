@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from bs4 import BeautifulSoup, Tag
 
 from .api import RanobeLibAPI
+from .cache import ChapterCache
 from .img import ImageHandler
 from .parser import RanobeLibParser
 from .settings import USER_DATA_DIR, settings
@@ -23,10 +24,13 @@ class ContentProcessor:
         self.api = api
         self.parser = parser
         self.image_handler = image_handler
+        self.cache = ChapterCache()
+        self.override_image_folder = None
         self.update_settings()
 
     def update_settings(self):
         """Обновление настроек из модуля settings"""
+        self.cache_chapters = settings.get("cache_chapters", True)
         self.download_cover_enabled = settings.get("download_cover")
         self.download_images_enabled = settings.get("download_images")
         self.group_by_volumes = settings.get("group_by_volumes")
@@ -138,9 +142,16 @@ class ContentProcessor:
         """Подготовка каталога загрузок и временного каталога."""
         downloads_dir = settings.get("save_directory")
         os.makedirs(downloads_dir, exist_ok=True)
-        temp_dir = os.path.join(USER_DATA_DIR, "temp")
+        
+        if self.override_image_folder:
+            return downloads_dir, self.override_image_folder
+            
+        temp_dir = os.path.join(USER_DATA_DIR, "cache")
         os.makedirs(temp_dir, exist_ok=True)
-        image_folder = os.path.join(temp_dir, f"images_{novel_id}")
+        if self.cache_chapters:
+            image_folder = os.path.join(temp_dir, f"cache_images_{novel_id}")
+        else:
+            image_folder = os.path.join(temp_dir, f"temp_images_{novel_id}")
         return downloads_dir, image_folder
 
     def get_safe_filename(self, title: str, extension: str) -> str:
@@ -168,7 +179,7 @@ class ContentProcessor:
             )
         return cover_filename
 
-    def _process_html_images(self, html_content: str, image_folder: str) -> str:
+    def _process_html_images(self, html_content: str, image_folder: str, branch_id: str) -> str:
         """Обработка HTML-контента: скачивание изображений, обновление путей и обработка дубликатов."""
         soup = BeautifulSoup(html_content, "html.parser")
         for img in soup.find_all("img"):
@@ -185,7 +196,7 @@ class ContentProcessor:
                 continue
 
             final_filename = self.image_handler.download_image(
-                url=img_src, folder=image_folder, deduplicate=True
+                url=img_src, folder=image_folder, deduplicate=True, filename_prefix=f"img_b{branch_id}"
             )
 
             if final_filename:
@@ -301,9 +312,9 @@ class ContentProcessor:
                 html = str(content)
         return html
 
-    def _prepare_chapter_content(self, html: str, image_folder: str) -> str:
+    def _prepare_chapter_content(self, html: str, image_folder: str, branch_id: str) -> str:
         """Скачивание изображений, замена путей и перевод <br> в параграфы."""
-        html_with_images = self._process_html_images(html, image_folder)
+        html_with_images = self._process_html_images(html, image_folder, branch_id)
         html_cleaned = self._cleanup_html_text(html_with_images)
         return self._convert_br_to_paragraphs(html_cleaned)
 
@@ -327,8 +338,47 @@ class ContentProcessor:
         elif branch is not None:
             branch_id = str(branch)
 
-        raw_html = self._fetch_chapter_html(novel_info, volume, number, branch_id, upcoming_requests)
-        processed_html = self._prepare_chapter_content(raw_html, image_folder)
+        novel_id = str(novel_info.get("id"))
+        
+        processed_html = None
+
+        if self.cache_chapters:
+            cached = self.cache.get_chapter(novel_id, branch_id, volume, number)
+            if cached:
+                html = cached.get("html", "")
+                all_images_exist = True
+                
+                for match in re.finditer(r'<img[^>]*src=["\'](images/[^"\']+)["\']', html):
+                    img_filename = os.path.basename(match.group(1))
+                    img_path = os.path.join(image_folder, img_filename)
+                    if not os.path.exists(img_path):
+                        all_images_exist = False
+                        print(f"⚠️ Изображение {img_filename} из кэша не найдено. Глава будет перекачана.")
+                        break
+                
+                if all_images_exist:
+                    processed_html = html
+                else:
+                    for match in re.finditer(r'<img[^>]*src=["\'](images/[^"\']+)["\']', html):
+                        img_filename = os.path.basename(match.group(1))
+                        img_path = os.path.join(image_folder, img_filename)
+                        if os.path.exists(img_path):
+                            try:
+                                os.remove(img_path)
+                            except OSError:
+                                pass
+                    
+                    prefix = f"img_b{branch_id}"
+                    if prefix in self.image_handler.image_counters:
+                        del self.image_handler.image_counters[prefix]
+
+        if processed_html is None:
+            raw_html = self._fetch_chapter_html(novel_info, volume, number, branch_id, upcoming_requests)
+            processed_html = self._prepare_chapter_content(raw_html, image_folder, branch_id)
+            if self.cache_chapters:
+                self.cache.save_chapter(
+                    novel_id, branch_id, volume, number, ch_info.get("name"), processed_html
+                )
 
         if self.add_translator and isinstance(branch, dict):
             translator_names = []

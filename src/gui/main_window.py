@@ -98,7 +98,7 @@ class MainWindow(QMainWindow):
         self.novel_info_worker = None
 
         self.setWindowTitle(f"RanobeLIB Downloader v{__version__}")
-        self.setMinimumSize(700, 500)
+        self.setMinimumSize(700, 620)
 
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
@@ -402,8 +402,8 @@ class MainWindow(QMainWindow):
             self.info_icon_label.setToolTip(tooltip_html)
             self.info_icon_label.setVisible(True)
 
-        self.chapters_widget.update_chapters(self.novel_info, self.chapters_data)
         self.chapters_widget.set_api_components(self.api, self.parser, self.image_handler)
+        self.chapters_widget.update_chapters(self.novel_info, self.chapters_data)
 
         self.statusbar.showMessage(
             f"Информация о новелле загружена", 5000
@@ -434,7 +434,9 @@ class MainWindow(QMainWindow):
 
         settings_widget = self.chapters_widget.settings_widget
         selected_formats = settings_widget.get_selected_formats()
-        if not selected_formats:
+        options = settings_widget.get_options()
+        
+        if not selected_formats and not options.get("cache_chapters", True):
             show_error_message(self, "Ошибка", "Не выбран ни один формат для скачивания")
             return
 
@@ -459,6 +461,7 @@ class MainWindow(QMainWindow):
             self,
         )
         download_dialog.exec()
+        self.chapters_widget._update_chapters_tree()
 
     def closeEvent(self, event):
         """Обработка закрытия приложения"""

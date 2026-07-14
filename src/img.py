@@ -11,7 +11,7 @@ import requests
 from PIL import Image
 from urllib.parse import urlparse
 
-from .api import RanobeLibAPI
+from .api import RanobeLibAPI, OperationCancelledError
 from .settings import settings
 
 
@@ -20,13 +20,36 @@ class ImageHandler:
 
     def __init__(self, api: RanobeLibAPI):
         self.api = api
-        self.image_counter: int = 1
+        self.image_counters: dict[str, int] = {}
         self.hash_to_filename: dict[str, str] = {}
+        self.populated_folders: set[str] = set()
 
     def reset(self):
         """Сброс состояния обработчика для новой сессии скачивания."""
-        self.image_counter = 1
+        self.image_counters = {}
         self.hash_to_filename = {}
+        self.populated_folders = set()
+
+    def populate_hash_cache(self, folder: str):
+        """Заполняет кэш хэшей уже существующими файлами из папки для дедупликации между сессиями."""
+        if not hasattr(self, "populated_folders"):
+            self.populated_folders = set()
+            
+        if folder in self.populated_folders:
+            return
+            
+        self.populated_folders.add(folder)
+        
+        if not os.path.exists(folder):
+            return
+        
+        for filename in os.listdir(folder):
+            if filename.startswith("temp_") or not os.path.isfile(os.path.join(folder, filename)):
+                continue
+            filepath = os.path.join(folder, filename)
+            file_hash = self._get_file_hash(filepath)
+            if file_hash and file_hash not in self.hash_to_filename:
+                self.hash_to_filename[file_hash] = filename
 
     def download_image(
         self,
@@ -34,8 +57,12 @@ class ImageHandler:
         folder: str,
         filename: Optional[str] = None,
         deduplicate: bool = False,
+        filename_prefix: str = "img",
     ) -> Optional[str]:
         """Скачивание, обработка и сохранение изображения."""
+        if deduplicate:
+            self.populate_hash_cache(folder)
+            
         os.makedirs(folder, exist_ok=True)
 
         try:
@@ -51,22 +78,39 @@ class ImageHandler:
         with open(temp_path, "wb") as f:
             f.write(content)
 
-        processed_path = self._convert_and_resize(temp_path)
+        processed_path = self._convert_image(temp_path)
+
+        if settings.get("compress_images") and not settings.get("cache_chapters", True):
+            self._compress_image(processed_path, processed_path)
 
         if deduplicate:
             file_hash = self._get_file_hash(processed_path)
             if file_hash and file_hash in self.hash_to_filename:
-                if os.path.exists(processed_path):
-                    os.remove(processed_path)
-                return self.hash_to_filename[file_hash]
+                target_filename = self.hash_to_filename[file_hash]
+                target_path = os.path.join(folder, target_filename)
+                if os.path.exists(target_path):
+                    if os.path.exists(processed_path):
+                        os.remove(processed_path)
+                    return target_filename
+                else:
+                    del self.hash_to_filename[file_hash]
 
         if filename:
             _, ext = os.path.splitext(processed_path)
             final_name = f"{filename}{ext}"
         else:
             _, ext = os.path.splitext(processed_path)
-            final_name = f"img_{self.image_counter}{ext}"
-            self.image_counter += 1
+            counter = self.image_counters.get(filename_prefix, 1)
+            while True:
+                exists = any(
+                    os.path.exists(os.path.join(folder, f"{filename_prefix}_{counter}{e}"))
+                    for e in [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]
+                )
+                if not exists:
+                    final_name = f"{filename_prefix}_{counter}{ext}"
+                    break
+                counter += 1
+            self.image_counters[filename_prefix] = counter + 1
 
         final_path = os.path.join(folder, final_name)
         if os.path.exists(processed_path) and processed_path != final_path:
@@ -99,6 +143,9 @@ class ImageHandler:
         except Exception:
             pass
 
+        if self.api.cancellation_event.is_set():
+            raise OperationCancelledError
+
         response = self.api.session.get(url, timeout=10)
         response.raise_for_status()
         content_type = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
@@ -119,8 +166,8 @@ class ImageHandler:
             return ".jpg"
         return ext_map.get(content_type, ".jpg")
 
-    def _convert_and_resize(self, filepath: str) -> str:
-        """Конвертация webp/bmp в jpg и изменение размера больших изображений."""
+    def _convert_image(self, filepath: str) -> str:
+        """Конвертация webp/bmp в jpg."""
         filename, ext = os.path.splitext(os.path.basename(filepath))
         if ext.lower() in [".webp", ".bmp"]:
             try:
@@ -134,20 +181,44 @@ class ImageHandler:
             except Exception as e:
                 print(f"\n⚠️ Не удалось конвертировать {filepath} в JPG: {e}")
 
-        if settings.get("compress_images"):
-            try:
-                with Image.open(filepath) as img:
-                    width, height = img.size
-                    if width > 800 or height > 800:
-                        ratio = min(800 / width, 800 / height)
-                        new_size = (int(width * ratio), int(height * ratio))
-                        resample_filter = getattr(Image, "LANCZOS", getattr(Image, "ANTIALIAS", 0))
-                        resized_img = img.resize(new_size, resample_filter)
-                        resized_img.save(filepath, quality=90)
-            except Exception as e:
-                print(f"\n⚠️ Не удалось изменить размер изображения {filepath}: {e}")
-
         return filepath
+
+    def _compress_image(self, src_path: str, dst_path: str) -> None:
+        """Универсальная функция сжатия одного изображения."""
+        import shutil
+        in_place = os.path.abspath(src_path) == os.path.abspath(dst_path)
+
+        try:
+            with Image.open(src_path) as img:
+                width, height = img.size
+                img_format = img.format or "JPEG"
+                if width > 800 or height > 800:
+                    ratio = min(800 / width, 800 / height)
+                    new_size = (int(width * ratio), int(height * ratio))
+                    resample_filter = getattr(Image, "LANCZOS", getattr(Image, "ANTIALIAS", 0))
+                    resized_img = img.resize(new_size, resample_filter)
+                    resized_img.save(dst_path, format=img_format, quality=90)
+                else:
+                    if not in_place:
+                        shutil.copy2(src_path, dst_path)
+
+        except Exception as e:
+            print(f"\n⚠️ Не удалось изменить размер изображения {src_path}: {e}")
+            if not in_place:
+                shutil.copy2(src_path, dst_path)
+
+    def compress_folder(self, source_folder: str, target_folder: str) -> None:
+        """Сжатие всех изображений из исходной папки в целевую."""
+        os.makedirs(target_folder, exist_ok=True)
+        if not os.path.exists(source_folder):
+            return
+
+        for filename in os.listdir(source_folder):
+            src_path = os.path.join(source_folder, filename)
+            dst_path = os.path.join(target_folder, filename)
+            if not os.path.isfile(src_path):
+                continue
+            self._compress_image(src_path, dst_path)
 
     def _get_file_hash(self, filepath: str) -> Optional[str]:
         """Вычисление MD5-хэша содержимого файла."""

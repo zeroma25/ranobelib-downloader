@@ -39,21 +39,22 @@ class ChapterItemDelegate(QStyledItemDelegate):
             options.palette.setColor(QPalette.ColorRole.Highlight, QColor("#314d68"))
 
         style = options.widget.style() if options.widget else QApplication.style()
+        
+        text_rect = (
+            style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, options, options.widget)
+            if style
+            else options.rect
+        )
+        
         text = options.text
-
         options.text = ""
+        
         if style:
             style.drawControl(QStyle.ControlElement.CE_ItemViewItem, options, painter)
 
         default_color = options.palette.color(QPalette.ColorRole.Text)
         team_color_hex = self.team_colors.get(team_name)
         team_qcolor = QColor(team_color_hex) if team_color_hex else default_color
-
-        text_rect = (
-            style.subElementRect(QStyle.SubElement.SE_ItemViewItemText, options, options.widget)
-            if style
-            else options.rect
-        )
 
         if painter:
             painter.save()

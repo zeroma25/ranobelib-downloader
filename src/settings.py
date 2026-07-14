@@ -7,7 +7,7 @@ import os
 from typing import Any, Dict, Optional
 
 APP_ROOT = os.path.abspath(".")
-USER_DATA_DIR = os.path.abspath("user_data")
+USER_DATA_DIR = os.path.abspath("data")
 os.makedirs(USER_DATA_DIR, exist_ok=True)
 
 
@@ -22,6 +22,7 @@ class Settings:
 
         self._settings: Dict[str, Any] = {}
         self._defaults: Dict[str, Any] = {
+            "cache_chapters": True,
             "download_cover": True,
             "download_images": True,
             "compress_images": True,

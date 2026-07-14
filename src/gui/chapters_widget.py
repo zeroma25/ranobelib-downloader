@@ -108,6 +108,8 @@ class ChaptersWidget(QWidget):
         self.deselect_all_button.setFixedSize(QSize(16, 16))
         header_layout.addWidget(self.deselect_all_button)
 
+
+
         chapters_layout.addLayout(header_layout)
 
         self.chapters_tree = ChapterTree()
@@ -128,6 +130,7 @@ class ChaptersWidget(QWidget):
             lambda: self.chapters_tree.set_check_state_for_all_items(Qt.CheckState.Unchecked)
         )
         self.filter_widget.filters_changed.connect(self._update_chapters_tree)
+        self.settings_widget.cache_cleared.connect(self._update_chapters_tree)
         self.chapters_tree.stats_changed.connect(self._update_stats_label)
         self._apply_tab_order()
 
@@ -156,6 +159,13 @@ class ChaptersWidget(QWidget):
         """Обновление списка глав на основе данных новеллы"""
         self.novel_info = novel_info
         self.chapters_data = chapters_data
+        
+        novel_id = str(novel_info.get("id", ""))
+        novel_name = novel_info.get("rus_name") or novel_info.get("eng_name") or novel_info.get("name") or f"Новелла {novel_id}"
+        if novel_id:
+            from ..cache import ChapterCache
+            ChapterCache().save_novel_info(novel_id, str(novel_name))
+            self.settings_widget.set_current_novel_id(novel_id)
 
         self.branches = get_formatted_branches_with_teams(novel_info, chapters_data)
 
@@ -192,10 +202,7 @@ class ChaptersWidget(QWidget):
         self.filter_widget.update_filters(self.branches, branch_team_groups_ordered)
         self.team_colors = self.filter_widget.get_team_colors()
         self.chapters_tree.set_team_colors(self.team_colors)
-        self._update_chapters_tree()
-        self.chapters_tree.select_default_chapters()
-        self._apply_tab_order()
-        
+
         if hasattr(self.chapters_tree, 'set_api_components') and hasattr(self, '_api_components'):
             self.chapters_tree.set_api_components(
                 self._api_components['api'],
@@ -203,6 +210,10 @@ class ChaptersWidget(QWidget):
                 self._api_components['image_handler'],
                 self.novel_info
             )
+
+        self._update_chapters_tree()
+        self.chapters_tree.select_default_chapters()
+        self._apply_tab_order()
 
     def _parse_chapter_number(self, number_str: str) -> tuple:
         """Преобразование строки номера главы в кортеж чисел для сортировки."""

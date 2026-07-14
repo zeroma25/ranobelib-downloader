@@ -76,13 +76,32 @@ class DownloadWorker(QThread):
         """Запуск процесса скачивания и создания книг"""
         self.start_time = time.time()
         self.image_handler.reset()
+        self.api.cancellation_event.clear()
 
         novel_id = self.novel_info.get("id")
-        self._temp_dir = os.path.join(USER_DATA_DIR, "temp", f"images_{novel_id}")
+        temp_dir_base = os.path.join(USER_DATA_DIR, "cache")
+        temp_images_dir = os.path.join(temp_dir_base, f"temp_images_{novel_id}")
+        
+        if os.path.exists(temp_images_dir):
+            try:
+                shutil.rmtree(temp_images_dir)
+            except Exception:
+                pass
+
+        if self.options.get("cache_chapters", True):
+            self._temp_dir = os.path.join(temp_dir_base, f"cache_images_{novel_id}")
+        else:
+            self._temp_dir = temp_images_dir
 
         should_emit_finish = True
         try:
             os.makedirs(self._temp_dir, exist_ok=True)
+            
+            if self.options.get("cache_chapters", True):
+                novel_name = self.novel_info.get("rus_name") or self.novel_info.get("name")
+                if novel_name:
+                    from ..cache import ChapterCache
+                    ChapterCache().save_novel_info(str(self.novel_info.get("id")), str(novel_name))
 
             self._download_chapters()
 
@@ -165,6 +184,23 @@ class DownloadWorker(QThread):
 
     def _create_books(self):
         """Создание книг в выбранных форматах"""
+        novel_id = self.novel_info.get("id")
+        temp_dir = os.path.join(USER_DATA_DIR, "cache")
+        
+        if self.options.get("cache_chapters", True):
+            source_folder = os.path.join(temp_dir, f"cache_images_{novel_id}")
+        else:
+            source_folder = os.path.join(temp_dir, f"temp_images_{novel_id}")
+            
+        override_folder = None
+        
+        if self.options.get("compress_images") and self.selected_formats:
+            if self.options.get("cache_chapters", True):
+                self.progress_update.emit("Сжатие изображений...", 0)
+                target_folder = os.path.join(temp_dir, f"temp_images_{novel_id}")
+                self.image_handler.compress_folder(source_folder, target_folder)
+                override_folder = target_folder
+
         creators = {
             "EPUB": EpubCreator(self.api, self.parser, self.image_handler),
             "FB2": Fb2Creator(self.api, self.parser, self.image_handler),
@@ -184,6 +220,9 @@ class DownloadWorker(QThread):
                 creator = creators.get(format_name)
                 if not creator:
                     continue
+                    
+                if override_folder:
+                    creator.override_image_folder = override_folder
 
                 if hasattr(creator, "content_processor"):
                     creator.content_processor.update_settings()
@@ -220,26 +259,30 @@ class DownloadWorker(QThread):
                     f"Создан файл {format_name}: {os.path.basename(filename)}", 100
                 )
 
+            except OperationCancelledError:
+                self.progress_update.emit("Отмена процесса...", 0)
+                self.is_cancelled = True
+                return
             except Exception as e:
                 self.progress_update.emit(f"Ошибка при создании {format_name}: {e}", 0)
 
     def _cleanup_temp_files(self):
-        """Очистка временных файлов"""
-        if not self._temp_dir or not os.path.exists(self._temp_dir):
-            return
-
-        self.progress_update.emit("Очистка временных файлов...", 0)
-        try:
-            shutil.rmtree(self._temp_dir)
-            self.progress_update.emit("Временные файлы удалены", 100)
-        except Exception as e:
-            self.progress_update.emit(f"Не удалось удалить временные файлы: {e}", 0)
-
+        """Очистка кэша в памяти и временных файлов"""
         novel_id = self.novel_info.get("id")
+        
+        temp_dir = os.path.join(USER_DATA_DIR, "cache", f"temp_images_{novel_id}")
+        if os.path.exists(temp_dir):
+            self.progress_update.emit("Очистка временных файлов...", 0)
+            try:
+                shutil.rmtree(temp_dir)
+                self.progress_update.emit("Временные файлы удалены", 100)
+            except Exception as e:
+                self.progress_update.emit(f"Не удалось удалить временные файлы: {e}", 0)
+
         cache_key = (novel_id, None)
         if cache_key in ContentProcessor._global_cache:
             ContentProcessor._global_cache.pop(cache_key, None)
-        self.progress_update.emit("Кэш глав очищен", 100)
+
 
 
 class DownloadDialog(QDialog):
@@ -291,7 +334,7 @@ class DownloadDialog(QDialog):
         self.chapters_progress.setValue(0)
         chapters_layout.addWidget(self.chapters_progress)
 
-        self.chapters_label = QLabel("0 из 0 глав загружено")
+        self.chapters_label = QLabel(f"0 из {len(self.selected_chapters)} глав загружено")
         chapters_layout.addWidget(self.chapters_label)
 
         time_layout = QHBoxLayout()
@@ -309,11 +352,16 @@ class DownloadDialog(QDialog):
 
         self.formats_progress = QProgressBar()
         self.formats_progress.setMinimum(0)
-        self.formats_progress.setMaximum(len(self.selected_formats))
-        self.formats_progress.setValue(0)
+        total_formats = len(self.selected_formats)
+        if total_formats == 0:
+            self.formats_progress.setMaximum(1)
+            self.formats_progress.setValue(1)
+        else:
+            self.formats_progress.setMaximum(total_formats)
+            self.formats_progress.setValue(0)
         formats_layout.addWidget(self.formats_progress)
 
-        self.formats_label = QLabel("0 из 0 форматов создано")
+        self.formats_label = QLabel(f"0 из {total_formats} форматов создано")
         formats_layout.addWidget(self.formats_label)
 
         layout.addWidget(formats_group)
@@ -346,7 +394,8 @@ class DownloadDialog(QDialog):
         title = self.novel_info.get("rus_name") or self.novel_info.get("eng_name", "Новелла")
         self.log_text.append(f"<b>Начало загрузки новеллы: {title}</b>")
         self.log_text.append(f"Выбрано глав: {len(self.selected_chapters)}")
-        self.log_text.append(f"Выбранные форматы: {', '.join(self.selected_formats)}")
+        formats_str = ", ".join(self.selected_formats) if self.selected_formats else "Нет (только кэш)"
+        self.log_text.append(f"Выбранные форматы: {formats_str}")
         self.log_text.append("─" * 50)
 
         self.download_worker = DownloadWorker(

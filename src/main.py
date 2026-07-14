@@ -82,31 +82,57 @@ def run_cli():
     title = re.sub(r"\s*\((?:Новелла|Novel)\)\s*$", "", title_raw, flags=re.IGNORECASE).strip()
     print(f"📖 Название: {title}")
 
-    print("🔄 Получение списка глав...")
-    chapters_data = api.get_novel_chapters(slug)
-    if not chapters_data:
-        if novel_info.get("is_licensed"):
-            print("❌ Доступ ограничен по требованию Правообладателя или РКН")
-        else:
-            print("❌ Не удалось загрузить список глав.")
-        return
+    try:
+        print("🔄 Получение списка глав...")
+        chapters_data = api.get_novel_chapters(slug)
+        if not chapters_data:
+            if novel_info.get("is_licensed"):
+                print("❌ Доступ ограничен по требованию Правообладателя или РКН")
+            else:
+                print("❌ Не удалось загрузить список глав.")
+            return
 
-    branches = get_formatted_branches_with_teams(novel_info, chapters_data)
-    selected_branch_id = _select_branch(branches, chapters_data)
-    if not selected_branch_id:
-        return
+        branches = get_formatted_branches_with_teams(novel_info, chapters_data)
+        selected_branch_id = _select_branch(branches, chapters_data)
+        if not selected_branch_id:
+            return
 
-    selected_creators = _select_output_formats(creators)
+        selected_creators = _select_output_formats(creators)
 
-    if selected_creators:
-        _generate_books(
-            novel_info,
-            chapters_data,
-            selected_branch_id,
-            selected_creators,
-        )
+        temp_images_dir = os.path.join(USER_DATA_DIR, "cache", f"temp_images_{novel_info.get('id')}")
+        if os.path.exists(temp_images_dir):
+            try:
+                shutil.rmtree(temp_images_dir)
+            except Exception:
+                pass
 
-    _cleanup_temp_folder(novel_info.get("id"))
+        if selected_creators == "CACHE_ONLY":
+            print("─" * 60)
+            print("🔄 Загрузка глав...")
+            try:
+                creator = creators[0]
+                creator.update_settings()
+                _, image_folder = creator.prepare_dirs(novel_info.get("id"))
+                if settings.get("cache_chapters", True):
+                    novel_name = novel_info.get("rus_name") or novel_info.get("name")
+                    if novel_name:
+                        from .cache import ChapterCache
+                        ChapterCache().save_novel_info(str(novel_info.get("id")), str(novel_name))
+                creator.prepare_chapters(novel_info, chapters_data, selected_branch_id, image_folder)
+                print("✅ Главы успешно загружены в кэш")
+            except OperationCancelledError:
+                pass
+            except Exception as e:
+                print(f"❌ Ошибка при загрузке глав: {e}")
+        elif selected_creators:
+            _generate_books(
+                novel_info,
+                chapters_data,
+                selected_branch_id,
+                selected_creators,
+            )
+    finally:
+        _cleanup_temp_folder(novel_info.get("id"))
 
 
 def _print_header():
@@ -138,7 +164,7 @@ def _handle_authentication(auth: RanobeLibAuth):
 
     choice = input("🔑 Пройти авторизацию на сайте? (y/n): ").strip().lower()
     if choice in {"y", "yes", "да", "д", "1"}:
-        if auth.authorize_with_webview():
+        if auth.authorize_with_cli():
             user_info = auth.validate_token()
             if user_info:
                 print(f"🔑 Выполнен вход как: {user_info.get('username', 'Пользователь')}")
@@ -149,6 +175,7 @@ def _handle_authentication(auth: RanobeLibAuth):
 def _show_settings():
     """Отображение текущих настроек."""
     print("⚙️ Текущие настройки:")
+    print(f"  • Использовать локальный кэш: {'✅' if settings.get('cache_chapters', True) else '❌'}")
     print(f"  • Скачивать обложку: {'✅' if settings.get('download_cover') else '❌'}")
     print(f"  • Скачивать изображения: {'✅' if settings.get('download_images') else '❌'}")
     print(f"  • Сжимать изображения: {'✅' if settings.get('compress_images') else '❌'}")
@@ -166,6 +193,27 @@ def _ask_change_settings():
 def _change_settings():
     """Изменение настроек пользователем."""
     print("⚙️ Изменение настроек:")
+
+    choice = (
+        input(f"  Использовать локальный кэш? (y/n) [{('y' if settings.get('cache_chapters', True) else 'n')}]: ")
+        .strip()
+        .lower()
+    )
+    if choice:
+        settings.set("cache_chapters", choice in {"y", "yes", "да", "д", "1"})
+
+    choice = (
+        input("  Очистить весь кэш загрузок прямо сейчас? (y/n) [n]: ")
+        .strip()
+        .lower()
+    )
+    if choice in {"y", "yes", "да", "д", "1"}:
+        try:
+            from .cache import ChapterCache
+            ChapterCache().clear_all_cache()
+            print("✅ Кэш очищен")
+        except Exception as e:
+            print(f"❌ Не удалось очистить кэш: {e}")
 
     choice = (
         input(f"  Скачивать обложку? (y/n) [{('y' if settings.get('download_cover') else 'n')}]: ")
@@ -280,9 +328,13 @@ def _select_output_formats(creators: List[Any]) -> List[Any]:
     has_all_option = len(creators) > 1
     all_option_num = str(len(creators) + 1) if has_all_option else None
 
+    cache_enabled = settings.get("cache_chapters", True)
+
     while True:
         print("─" * 60)
         print("⚙️ Доступные для сохранения форматы:")
+        if cache_enabled:
+            print("  0. Только кэш (без создания книг)")
         for i, creator in enumerate(creators):
             print(f"  {i+1}. {creator.format_name}")
         if has_all_option:
@@ -295,6 +347,15 @@ def _select_output_formats(creators: List[Any]) -> List[Any]:
 
         if not choices:
             print("⚠️ Выбор не может быть пустым. Пожалуйста, попробуйте снова.")
+            continue
+
+        if cache_enabled and "0" in choices:
+            if len(choices) > 1:
+                print("⚠️ Если вы выбираете '0. Только кэш', другие варианты указывать не нужно.")
+                continue
+            return "CACHE_ONLY"
+        elif not cache_enabled and "0" in choices:
+            print("⚠️ Опция 'Только кэш' недоступна, так как использование локального кэша отключено.")
             continue
 
         if has_all_option and all_option_num in choices:
@@ -328,8 +389,34 @@ def _generate_books(
 ):
     """Запуск процесса создания файлов книг в выбранных форматах."""
     print("─" * 60)
+    
+    novel_id = novel_info.get("id")
+    temp_dir = os.path.join(USER_DATA_DIR, "cache")
+    
+    if settings.get("cache_chapters", True):
+        source_folder = os.path.join(temp_dir, f"cache_images_{novel_id}")
+    else:
+        source_folder = os.path.join(temp_dir, f"temp_images_{novel_id}")
+        
+    if settings.get("cache_chapters", True):
+        novel_name = novel_info.get("rus_name") or novel_info.get("name")
+        if novel_name:
+            from .cache import ChapterCache
+            ChapterCache().save_novel_info(str(novel_info.get("id")), str(novel_name))
+        
+    override_folder = None
+    
+    if settings.get("compress_images") and creators:
+        if settings.get("cache_chapters", True):
+            print("Сжатие изображений...")
+            target_folder = os.path.join(temp_dir, f"temp_images_{novel_id}")
+            creators[0].image_handler.compress_folder(source_folder, target_folder)
+            override_folder = target_folder
+        
     for creator in creators:
         try:
+            if override_folder:
+                creator.override_image_folder = override_folder
             creator.update_settings()
 
             filename = creator.create(novel_info, chapters_data, selected_branch_id)
@@ -342,7 +429,7 @@ def _generate_books(
 
 def _cleanup_temp_folder(novel_id: Any):
     """Удаление временной папки текущей сессии."""
-    temp_dir = os.path.join(USER_DATA_DIR, "temp", f"images_{novel_id}")
+    temp_dir = os.path.join(USER_DATA_DIR, "cache", f"temp_images_{novel_id}")
     if os.path.exists(temp_dir):
         print("🧹 Очистка временных файлов...")
         try:

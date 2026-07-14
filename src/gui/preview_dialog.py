@@ -18,6 +18,7 @@ class ContentLoader(QThread):
 
     content_loaded = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
+    chapter_cached = pyqtSignal(str, str, str, str)
 
     def __init__(
         self,
@@ -26,6 +27,7 @@ class ContentLoader(QThread):
         novel_info: Dict[str, Any],
         chapter_info: Dict[str, Any],
         branch_id: str,
+        image_handler: ImageHandler,
     ):
         super().__init__()
         self.api = api
@@ -33,36 +35,87 @@ class ContentLoader(QThread):
         self.novel_info = novel_info
         self.chapter_info = chapter_info
         self.branch_id = branch_id
+        self.image_handler = image_handler
 
     def run(self):
         """Загружает содержимое главы"""
         try:
-            novel_slug = self.novel_info.get("slug_url") or f"{self.novel_info.get('id')}--{self.novel_info.get('slug')}"
-            if not novel_slug:
-                raise ValueError("Slug новеллы не найден")
-
-            volume = str(self.chapter_info.get("volume", "1"))
-            number = str(self.chapter_info.get("number", "1"))
-            branch_id = self.branch_id if self.branch_id != "0" else None
-
-            chapter_data = self.api.get_chapter_content(novel_slug, volume, number, branch_id)
-            if not chapter_data:
-                raise ValueError("Данные главы не получены")
-
-            html_content = ""
-            if chapter_data.get("content"):
-                content = chapter_data["content"]
-                if isinstance(content, dict) and content.get("type") == "doc" and content.get("content"):
-                    html_content = self.parser.json_to_html(
-                        content["content"], chapter_data.get("attachments", [])
-                    )
-                else:
-                    html_content = str(content)
+            from ..settings import USER_DATA_DIR, settings
+            import os
             
-            if not html_content:
-                raise ValueError("Содержимое главы пустое")
+            novel_id = str(self.novel_info.get("id"))
+            
+            if settings.get("cache_chapters", True):
+                from ..processing import ContentProcessor
+                
+                image_folder = os.path.join(USER_DATA_DIR, "cache", f"cache_images_{novel_id}")
+                os.makedirs(image_folder, exist_ok=True)
 
-            self.content_loaded.emit(html_content)
+                processor = ContentProcessor(self.api, self.parser, self.image_handler)
+                processor.update_settings()
+
+                branch_id_str = self.branch_id if self.branch_id and self.branch_id != "0" else "0"
+                volume = str(self.chapter_info.get("volume", "1"))
+                number = str(self.chapter_info.get("number", "1"))
+
+                branch_info = next(
+                    (
+                        b
+                        for b in self.chapter_info.get("branches", [])
+                        if str(b.get("branch_id", "0")) == str(branch_id_str)
+                    ),
+                    {"branch_id": branch_id_str} if branch_id_str != "0" else None
+                )
+
+                ch_data = {
+                    "chapter": self.chapter_info,
+                    "branch": branch_info
+                }
+
+                from ..cache import ChapterCache
+                cache = ChapterCache()
+                is_from_cache = False
+                
+                cached = cache.get_chapter(novel_id, branch_id_str, volume, number)
+                if cached and cached.get("html"):
+                    is_from_cache = True
+
+                processed_chapter = processor._process_single_chapter(ch_data, self.novel_info, image_folder)
+                html_content = processed_chapter.get("html", "")
+
+                if not html_content:
+                    raise ValueError("Содержимое главы пустое")
+
+                if not is_from_cache:
+                    self.chapter_cached.emit(novel_id, branch_id_str, volume, number)
+
+                self.content_loaded.emit(html_content)
+            else:
+                novel_slug = self.novel_info.get("slug_url") or f"{novel_id}--{self.novel_info.get('slug')}"
+                if not novel_slug:
+                    raise ValueError("Slug новеллы не найден")
+
+                volume = str(self.chapter_info.get("volume", "1"))
+                number = str(self.chapter_info.get("number", "1"))
+                branch_id = self.branch_id if self.branch_id and self.branch_id != "0" else None
+
+                chapter_data = self.api.get_chapter_content(novel_slug, volume, number, branch_id)
+                if not chapter_data:
+                    raise ValueError("Данные главы не получены")
+
+                html_content = ""
+                if chapter_data.get("content"):
+                    content = chapter_data["content"]
+                    if isinstance(content, dict) and content.get("type") == "doc" and content.get("content"):
+                        html_content = self.parser.json_to_html(
+                            content["content"], chapter_data.get("attachments", [])
+                        )
+                    else:
+                        html_content = str(content)
+                
+                if not html_content:
+                    raise ValueError("Содержимое главы пустое")
+                self.content_loaded.emit(html_content)
 
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -70,6 +123,8 @@ class ContentLoader(QThread):
 
 class PreviewDialog(QDialog):
     """Диалог для предпросмотра главы с настройками отображения"""
+    
+    chapter_cached = pyqtSignal(str, str, str, str)
 
     def __init__(
         self,
@@ -104,6 +159,7 @@ class PreviewDialog(QDialog):
         """Настройка интерфейса диалога"""
         self.setModal(False)
         self.setWindowFlags(Qt.WindowType.Window)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setObjectName("previewDialog")
 
         chapter_title = f"Глава {self.chapter_info.get('number', '?')}"
@@ -256,10 +312,11 @@ class PreviewDialog(QDialog):
         )
 
         self.content_loader = ContentLoader(
-            self.api, self.parser, self.novel_info, self.chapter_info, self.branch_id
+            self.api, self.parser, self.novel_info, self.chapter_info, self.branch_id, self.image_handler
         )
         self.content_loader.content_loaded.connect(self._on_content_loaded)
         self.content_loader.error_occurred.connect(self._on_content_error)
+        self.content_loader.chapter_cached.connect(self.chapter_cached.emit)
         self.content_loader.start()
 
     def _on_content_loaded(self, content: str):
@@ -298,6 +355,38 @@ class PreviewDialog(QDialog):
         def replace_image(match):
             img_url = match.group(1)
             try:
+                import os
+                if img_url.startswith('data:'):
+                    return f'<div class="image-container"><img src="{img_url}" alt="Изображение"></div>'
+                    
+                from ..settings import USER_DATA_DIR
+                novel_id = str(self.novel_info.get("id"))
+                
+                check_paths = [
+                    img_url,
+                    os.path.join(USER_DATA_DIR, "cache", f"cache_images_{novel_id}", os.path.basename(img_url)) if img_url.startswith("images/") else "",
+                    os.path.join(USER_DATA_DIR, "cache", f"temp_images_{novel_id}", os.path.basename(img_url)) if img_url.startswith("images/") else ""
+                ]
+                
+                local_path = None
+                for path in check_paths:
+                    if path and os.path.exists(path):
+                        local_path = path
+                        break
+                        
+                if local_path:
+                    with open(local_path, "rb") as img_file:
+                        img_base64 = base64.b64encode(img_file.read()).decode("ascii")
+                    content_type = "image/jpeg"
+                    if local_path.lower().endswith(".png"):
+                        content_type = "image/png"
+                    elif local_path.lower().endswith(".gif"):
+                        content_type = "image/gif"
+                    elif local_path.lower().endswith(".webp"):
+                        content_type = "image/webp"
+                    data_url = f"data:{content_type};base64,{img_base64}"
+                    return f'<div class="image-container"><img src="{data_url}" alt="Изображение"></div>'
+
                 if img_url.startswith('/'):
                     img_url = f"https://ranobelib.me{img_url}"
                 elif not img_url.startswith(('http://', 'https://')):
