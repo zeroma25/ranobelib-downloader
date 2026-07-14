@@ -409,7 +409,12 @@ def _generate_books(
         
     override_folder = None
     
-    if settings.get("compress_images") and creators:
+    if creators:
+        creators[0].update_settings()
+        _, image_folder = creators[0].prepare_dirs(novel_id)
+        creators[0].prepare_chapters(novel_info, chapters_data, selected_branch_id, image_folder)
+
+    if settings.get("compress_images") and (settings.get("download_images") or settings.get("download_cover")) and creators:
         if settings.get("cache_chapters", True):
             print("Сжатие изображений...")
             target_folder = os.path.join(temp_dir, f"temp_images_{novel_id}")

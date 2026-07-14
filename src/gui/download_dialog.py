@@ -193,7 +193,7 @@ class DownloadWorker(QThread):
             
         override_folder = None
         
-        if self.options.get("compress_images") and self.selected_formats:
+        if self.options.get("compress_images") and (self.options.get("download_images") or self.options.get("download_cover")) and self.selected_formats:
             if self.options.get("cache_chapters", True):
                 self.progress_update.emit("Сжатие изображений...", 0)
                 target_folder = os.path.join(temp_dir, f"temp_images_{novel_id}")
