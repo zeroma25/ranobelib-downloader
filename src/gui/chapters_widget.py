@@ -26,6 +26,7 @@ class ChaptersWidget(QWidget):
         self.branches = {}
         self.team_colors = {}
         self.chapters_state = {}
+        self.branch_priority: Dict[str, int] = {}
         self._setup_ui()
         self.select_all_button.setVisible(False)
         self.select_default_button.setVisible(False)
@@ -140,6 +141,7 @@ class ChaptersWidget(QWidget):
         self.chapters_data = None
         self.branches = {}
         self.chapters_state = {}
+        self.branch_priority = {}
         self.chapters_tree.clear()
         self.filter_widget.clear()
         self._update_stats_label(0, 0)
@@ -176,6 +178,8 @@ class ChaptersWidget(QWidget):
         seen_global_keys = set()
         seen_per_branch = {bid: set() for bid, _ in sorted_branches}
 
+        self.branch_priority = {}
+
         for chapter in self.chapters_data or []:
             for branch in chapter.get("branches", []):
                 if not isinstance(branch, dict):
@@ -198,6 +202,9 @@ class ChaptersWidget(QWidget):
                 if key_group not in seen_per_branch[branch_id]:
                     branch_team_groups_ordered[branch_id].append(display_group)
                     seen_per_branch[branch_id].add(key_group)
+
+                if branch_id not in self.branch_priority:
+                    self.branch_priority[branch_id] = len(self.branch_priority)
 
         self.filter_widget.update_filters(self.branches, branch_team_groups_ordered)
         self.team_colors = self.filter_widget.get_team_colors()
@@ -262,6 +269,10 @@ class ChaptersWidget(QWidget):
 
                 if branch_id in selected_branch_ids and current_group_tuple in selected_team_groups:
                     available_translations.append({"id": branch_id, "teams": teams})
+
+            available_translations.sort(
+                key=lambda t: self.branch_priority.get(str(t["id"]), 999999)
+            )
 
             if not available_translations:
                 continue
