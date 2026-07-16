@@ -221,6 +221,7 @@ class ChaptersWidget(QWidget):
         self._update_chapters_tree()
         self.chapters_tree.select_default_chapters()
         self._apply_tab_order()
+        self.chapters_tree.verticalScrollBar().setValue(0)
 
     def _parse_chapter_number(self, number_str: str) -> tuple:
         """Преобразование строки номера главы в кортеж чисел для сортировки."""
