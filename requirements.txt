@@ -4,6 +4,6 @@ keyring
 lxml
 Pillow
 PyQt6
-pywebview
+PyQt6-WebEngine
 requests
 tqdm 

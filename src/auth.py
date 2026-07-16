@@ -7,15 +7,12 @@ import hashlib
 import json
 import os
 import secrets
-import threading
-import time
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
 import keyring
 import keyring.errors
 import requests
-import webview
 
 from .api import RanobeLibAPI
 from .settings import USER_DATA_DIR
@@ -30,8 +27,8 @@ class RanobeLibAuth:
         self.keyring_username = "auth_token"
         self.fallback_token_path = os.path.join(USER_DATA_DIR, "auth.json")
 
-    def get_auth_code_via_webview(self) -> Optional[Dict[str, str]]:
-        """Открытие окна webview для получения кода авторизации. Возвращает словарь с кодом и секретом."""
+    def generate_auth_details(self) -> Dict[str, str]:
+        """Генерация данных для авторизации (URL, секрет и др.)."""
         secret = self._generate_random_string(128)
         state = self._generate_random_string(40)
         redirect_uri = f"{self.api.site_url}/ru/front/auth/oauth/callback"
@@ -43,11 +40,12 @@ class RanobeLibAuth:
             "&code_challenge_method=S256&prompt=consent"
         )
 
-        auth_code = self._get_authorization_code(challenge_url, redirect_uri)
-        if not auth_code:
-            return None
-
-        return {"code": auth_code, "secret": secret, "redirect_uri": redirect_uri}
+        return {
+            "url": challenge_url,
+            "secret": secret,
+            "redirect_uri": redirect_uri,
+            "state": state
+        }
 
     def finish_authorization(self, auth_data: Dict[str, str]) -> Optional[str]:
         """Завершает процесс авторизации, обменивая код на токен."""
@@ -68,26 +66,23 @@ class RanobeLibAuth:
             print("⚠️ Ответ не содержит access_token")
             return None
 
-    def authorize_with_webview(self) -> Optional[str]:
-        """Открытие окна авторизации и автоматическое получение токена после входа пользователя."""
-        auth_data = self.get_auth_code_via_webview()
-        if not auth_data:
+    def login_with_direct_token(self, token: str) -> Optional[str]:
+        """Прямая авторизация по готовому токену."""
+        self.api.set_token(token)
+        if self.validate_token():
+            self.save_token({"access_token": token})
+            print("✅ Токен успешно сохранён")
+            return token
+        else:
+            print("⚠️ Введенный токен недействителен")
+            self.api.clear_token()
             return None
-        return self.finish_authorization(auth_data)
 
     def get_auth_code_via_cli(self) -> Optional[Dict[str, str]]:
         """Получение кода авторизации через консоль (копирование ссылки)."""
-        secret = self._generate_random_string(128)
-        state = self._generate_random_string(40)
-        redirect_uri = f"{self.api.site_url}/ru/front/auth/oauth/callback"
-        challenge = self._code_challenge(secret)
-
-        challenge_url = (
-            "https://auth.lib.social/auth/oauth/authorize?scope=&client_id=1&response_type=code"
-            f"&redirect_uri={redirect_uri}&state={state}&code_challenge={challenge}"
-            "&code_challenge_method=S256&prompt=consent"
-        )
-
+        auth_details = self.generate_auth_details()
+        challenge_url = auth_details["url"]
+        
         print("\n" + "═" * 60)
         print("🔐 АВТОРИЗАЦИЯ")
         print("\nСпособ 1 (Токен напрямую - Рекомендуется):")
@@ -107,6 +102,7 @@ class RanobeLibAuth:
 
         user_input = input("🔗 Вставьте токен ИЛИ ссылку с кодом: ").strip()
         if not user_input:
+            print("ℹ️ Авторизация отменена.")
             return None
 
         if user_input.lower().startswith("bearer "):
@@ -125,8 +121,9 @@ class RanobeLibAuth:
                     code = extracted_code
             except Exception:
                 pass
-
-        return {"code": code, "secret": secret, "redirect_uri": redirect_uri}
+        
+        auth_details["code"] = code
+        return auth_details
 
     def authorize_with_cli(self) -> Optional[str]:
         """Консольный процесс авторизации."""
@@ -135,16 +132,7 @@ class RanobeLibAuth:
             return None
             
         if "direct_token" in auth_data:
-            token = auth_data["direct_token"]
-            self.api.set_token(token)
-            if self.validate_token():
-                self.save_token({"access_token": token})
-                print("✅ Токен успешно сохранён")
-                return token
-            else:
-                print("⚠️ Введенный токен недействителен")
-                self.api.clear_token()
-                return None
+            return self.login_with_direct_token(auth_data["direct_token"])
 
         return self.finish_authorization(auth_data)
 
@@ -293,57 +281,6 @@ class RanobeLibAuth:
         """Вычисление code_challenge в соответствии с PKCE (SHA256 + Base64url, без =)"""
         digest = hashlib.sha256(verifier.encode("utf-8")).digest()
         return base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
-
-    def _get_authorization_code(self, challenge_url: str, redirect_uri: str) -> Optional[str]:
-        """Открытие webview для получения кода авторизации."""
-        print("🔐 Открываем окно авторизации...")
-
-        auth_code_container: Dict[str, Optional[str]] = {"code": None}
-        window_ready = threading.Event()
-
-        def on_loaded():
-            """Сигнализирование, что окно готово к работе."""
-            window_ready.set()
-
-        def _watch_redirect():
-            """Отслеживание URL в webview и извлечение кода авторизации."""
-            window_ready.wait()
-
-            while not auth_code_container["code"]:
-                try:
-                    current_url = window.get_current_url()
-                    if current_url is None:
-                        break
-
-                    if current_url.startswith(redirect_uri):
-                        parsed_url = urlparse(current_url)
-                        query_params = parse_qs(parsed_url.query)
-                        code = query_params.get("code", [None])[0]
-                        if code:
-                            auth_code_container["code"] = code
-                            window.destroy()
-                        break
-                except Exception:
-                    break
-                time.sleep(0.5)
-
-        window = webview.create_window(
-            "Авторизация RanobeLIB",
-            url=challenge_url,
-            width=650,
-            height=750,
-            resizable=True,
-        )
-        window.events.loaded += on_loaded
-
-        thread = threading.Thread(target=_watch_redirect, daemon=True)
-        thread.start()
-
-        webview.start(gui="edgechromium")
-
-        if not auth_code_container["code"]:
-            print("⚠️ Не удалось получить код авторизации. Вход отменён.")
-        return auth_code_container["code"]
 
     def _exchange_code_for_token(
         self, code: str, secret: str, redirect_uri: str

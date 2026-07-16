@@ -13,6 +13,11 @@ from .main_window import MainWindow
 
 def run_gui():
     """Запуск графического интерфейса"""
+    try:
+        import PyQt6.QtWebEngineWidgets
+    except ImportError:
+        pass
+        
     app = QApplication(sys.argv)
     app.setApplicationName("RanobeLIB Downloader")
     app.setOrganizationName("RanobeLIB")

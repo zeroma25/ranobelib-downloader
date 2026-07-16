@@ -4,10 +4,18 @@
 
 import base64
 from typing import Any, Callable, Dict, Optional
+from urllib.parse import parse_qs, urlparse
 
-from PyQt6.QtCore import QObject, QPoint, QSize, Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, QPoint, QSize, Qt, QThread, pyqtSignal, QUrl
 from PyQt6.QtGui import QIcon, QPainter, QPainterPath, QPixmap
-from PyQt6.QtWidgets import QLabel, QMenu, QMessageBox, QPushButton, QVBoxLayout, QWidget, QWidgetAction
+from PyQt6.QtWidgets import QLabel, QMenu, QMessageBox, QPushButton, QVBoxLayout, QWidget, QWidgetAction, QDialog
+
+try:
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+    from PyQt6.QtWebEngineCore import QWebEnginePage
+except ImportError:
+    QWebEngineView = None
+    QWebEnginePage = None
 
 from ..api import RanobeLibAPI
 from ..auth import RanobeLibAuth
@@ -16,7 +24,7 @@ from ..auth import RanobeLibAuth
 class AuthWorker(QThread):
     """Рабочий поток для авторизации"""
 
-    finished = pyqtSignal(bool, str)
+    auth_finished = pyqtSignal(bool, str)
 
     def __init__(self, auth: RanobeLibAuth, auth_data: Dict[str, str], parent=None):
         super().__init__(parent)
@@ -28,11 +36,11 @@ class AuthWorker(QThread):
         try:
             token = self.auth.finish_authorization(self.auth_data)
             if token:
-                self.finished.emit(True, "Авторизация успешна")
+                self.auth_finished.emit(True, "Авторизация успешна")
             else:
-                self.finished.emit(False, "Не удалось получить токен")
+                self.auth_finished.emit(False, "Не удалось получить токен")
         except Exception as e:
-            self.finished.emit(False, str(e))
+            self.auth_finished.emit(False, str(e))
 
 
 class AvatarLoader(QThread):
@@ -57,6 +65,49 @@ class AvatarLoader(QThread):
             self.finished.emit(pixmap)
         except Exception as e:
             self.error.emit(str(e))
+
+
+class SilentWebEnginePage(QWebEnginePage if QWebEnginePage else object):
+    """Кастомная страница для отключения вывода JS предупреждений в консоль."""
+    def javaScriptConsoleMessage(self, level, message, lineNumber, sourceID):
+        pass
+
+
+class WebAuthDialog(QDialog):
+    """Диалог авторизации через встроенный браузер."""
+    
+    code_received = pyqtSignal(str)
+    
+    def __init__(self, challenge_url: str, redirect_uri: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Авторизация RanobeLIB")
+        self.resize(650, 750)
+        self.redirect_uri = redirect_uri
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        
+        if QWebEngineView is not None:
+            self.web_view = QWebEngineView(self)
+            self.page = SilentWebEnginePage(self.web_view)
+            self.web_view.setPage(self.page)
+            self.layout.addWidget(self.web_view)
+            
+            self.web_view.urlChanged.connect(self._on_url_changed)
+            self.web_view.load(QUrl(challenge_url))
+        else:
+            self.layout.addWidget(QLabel("Библиотека PyQt6-WebEngine не установлена."))
+        
+    def _on_url_changed(self, url: QUrl):
+        """Отслеживает изменение URL для перехвата редиректа с кодом."""
+        current_url = url.toString()
+        if current_url.startswith(self.redirect_uri):
+            parsed_url = urlparse(current_url)
+            query_params = parse_qs(parsed_url.query)
+            code = query_params.get("code", [None])[0]
+            if code:
+                self.code_received.emit(code)
+                self.accept()
 
 
 class AuthManager(QObject):
@@ -198,17 +249,28 @@ class AuthManager(QObject):
 
         self.status_message.emit("Открывается окно авторизации...", 0)
 
-        auth_data = self.auth.get_auth_code_via_webview()
+        auth_details = self.auth.generate_auth_details()
 
-        if not auth_data:
-            self.status_message.emit("Авторизация отменена пользователем", 3000)
-            return
+        try:
+            if QWebEngineView is None:
+                raise ImportError("PyQt6-WebEngine is missing")
+                
+            dialog = WebAuthDialog(auth_details["url"], auth_details["redirect_uri"], self.parent_widget)
+            
+            def on_code_received(code: str):
+                auth_details["code"] = code
+                self.status_message.emit("Код авторизации получен, обмен на токен...", 0)
+                self.auth_worker = AuthWorker(self.auth, auth_details)
+                self.auth_worker.auth_finished.connect(self._on_auth_finished)
+                self.auth_worker.start()
 
-        self.status_message.emit("Код авторизации получен, обмен на токен...", 0)
-
-        self.auth_worker = AuthWorker(self.auth, auth_data)
-        self.auth_worker.finished.connect(self._on_auth_finished)
-        self.auth_worker.start()
+            dialog.code_received.connect(on_code_received)
+            
+            if dialog.exec() != QDialog.DialogCode.Accepted and "code" not in auth_details:
+                self.status_message.emit("Авторизация отменена пользователем", 3000)
+        except ImportError as e:
+            self.status_message.emit("Ошибка инициализации окна авторизации. Убедитесь, что установлен PyQt6-WebEngine.", 5000)
+            print(f"Ошибка импорта WebAuthDialog: {e}")
 
     def _on_auth_finished(self, success: bool, message: str):
         """Обработка завершения авторизации."""
