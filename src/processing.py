@@ -190,7 +190,7 @@ class ContentProcessor:
 
     def _process_html_images(self, html_content: str, image_folder: str, branch_id: str) -> str:
         """Обработка HTML-контента: скачивание изображений, обновление путей и обработка дубликатов."""
-        soup = BeautifulSoup(html_content, "html.parser")
+        soup = BeautifulSoup(html_content, "lxml")
         for img in soup.find_all("img"):
             if not isinstance(img, Tag):
                 continue
@@ -403,7 +403,7 @@ class ContentProcessor:
                 translator_names.append("Неизвестный")
 
             translator_str = "Переводчик: " + ", ".join(filter(None, translator_names))
-            soup = BeautifulSoup(processed_html, "html.parser")
+            soup = BeautifulSoup(processed_html, "lxml")
 
             translator_tag = soup.new_tag("p")
             translator_tag.string = translator_str
@@ -425,8 +425,8 @@ class ContentProcessor:
         """Очистка текста внутри HTML от лишних переносов строк, пробелов и тегов."""
         if not html:
             return ""
-        soup = BeautifulSoup(html, "html.parser")
-        for text_node in soup.find_all(text=True):
+        soup = BeautifulSoup(html, "lxml")
+        for text_node in soup.find_all(string=True):
             if text_node.parent and text_node.parent.name in ["style", "script", "pre"]:
                 continue
 
