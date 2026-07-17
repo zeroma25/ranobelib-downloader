@@ -137,6 +137,9 @@ class DownloadWorker(QThread):
         processor.group_by_volumes = self.options.get("group_by_volumes", processor.group_by_volumes)
         processor.add_translator = self.options.get("add_translator", processor.add_translator)
 
+        non_cached_chapters_done = 0
+        total_download_time = 0.0
+
         for i, chapter_data in enumerate(self.selected_chapters):
             if self.is_cancelled:
                 return
@@ -162,21 +165,35 @@ class DownloadWorker(QThread):
                 f"Загрузка {chapter_title}...", int(100 * (i / total_chapters))
             )
 
+            start_chapter_time = time.time()
+
             prepared_chapter = processor._process_single_chapter(
                 {"chapter": chapter_info, "branch": branch_info},
                 self.novel_info,
                 self._temp_dir,
             )
+            
+            chapter_time = time.time() - start_chapter_time
 
             self.prepared_chapters.append(prepared_chapter)
+
+            if not prepared_chapter.get("is_cached", False):
+                non_cached_chapters_done += 1
+                total_download_time += chapter_time
 
             elapsed_time = time.time() - self.start_time
             chapters_done = i + 1
             remaining_time = -1.0
-            if chapters_done > 0:
-                avg_time_per_chapter = elapsed_time / chapters_done
-                chapters_remaining = total_chapters - chapters_done
+            
+            chapters_remaining = total_chapters - chapters_done
+            
+            if non_cached_chapters_done > 0:
+                avg_time_per_chapter = total_download_time / non_cached_chapters_done
                 remaining_time = avg_time_per_chapter * chapters_remaining
+            elif chapters_done > 0:
+                avg_time_per_chapter = elapsed_time / chapters_done
+                remaining_time = avg_time_per_chapter * chapters_remaining
+
             self.time_update.emit(elapsed_time, remaining_time)
 
         self.progress_update.emit("Все главы загружены", 100)

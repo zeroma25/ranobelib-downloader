@@ -347,6 +347,7 @@ class ContentProcessor:
         novel_id = str(novel_info.get("id"))
         
         processed_html = None
+        is_cached = False
 
         if self.cache_chapters:
             cached = self.cache.get_chapter(novel_id, branch_id, volume, number)
@@ -364,6 +365,7 @@ class ContentProcessor:
                 
                 if all_images_exist:
                     processed_html = html
+                    is_cached = True
                 else:
                     for match in re.finditer(r'<img[^>]*src=["\'](images/[^"\']+)["\']', html):
                         img_filename = os.path.basename(match.group(1))
@@ -417,6 +419,7 @@ class ContentProcessor:
             "number": number,
             "name": ch_info.get("name"),
             "html": processed_html,
+            "is_cached": is_cached,
         }
 
         return result
