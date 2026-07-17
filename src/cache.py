@@ -2,6 +2,7 @@
 Модуль для работы с кэшем скачанных глав (SQLite)
 """
 
+import atexit
 import os
 import sqlite3
 import threading
@@ -31,18 +32,24 @@ class ChapterCache:
         if db_path is None:
             db_path = os.path.join(USER_DATA_DIR, "cache", "cache.db")
         self.db_path = db_path
-        self._local = threading.local()
+        self._conn = None
         self._init_db()
         self._initialized = True
+        atexit.register(self.close)
+
+    def close(self):
+        """Закрытие соединения перед выходом."""
+        if self._conn:
+            self._conn.close()
+            self._conn = None
 
     @property
     def conn(self) -> sqlite3.Connection:
-        """Получение или создание подключения к БД для текущего потока."""
-        if not hasattr(self._local, "conn"):
-            conn = sqlite3.connect(self.db_path)
-            conn.execute("PRAGMA journal_mode=WAL;")
-            self._local.conn = conn
-        return self._local.conn
+        """Получение или создание подключения к БД (одно на все потоки)."""
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self._conn.execute("PRAGMA journal_mode=WAL;")
+        return self._conn
 
     def _init_db(self):
         """Инициализация таблиц базы данных."""
@@ -148,7 +155,6 @@ class ChapterCache:
         with self.conn:
             self.conn.execute("DELETE FROM chapters WHERE novel_id = ?", (str(novel_id),))
             self.conn.execute("DELETE FROM novels WHERE novel_id = ?", (str(novel_id),))
-        self.conn.execute("VACUUM")
         
         if clear_images:
             temp_dir = os.path.join(USER_DATA_DIR, "cache", f"cache_images_{novel_id}")
