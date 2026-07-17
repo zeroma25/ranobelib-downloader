@@ -21,6 +21,26 @@ from ..api import RanobeLibAPI
 from ..auth import RanobeLibAuth
 
 
+class TokenValidateWorker(QThread):
+    """Рабочий поток для проверки сохраненного токена"""
+
+    finished = pyqtSignal(bool, dict, str)
+
+    def __init__(self, auth: RanobeLibAuth, parent=None):
+        super().__init__(parent)
+        self.auth = auth
+
+    def run(self):
+        try:
+            user_data = self.auth.validate_token()
+            if user_data:
+                self.finished.emit(True, user_data, "Авторизация загружена из сохраненных данных")
+            else:
+                self.finished.emit(False, {}, "Сохраненный токен недействителен, требуется повторная авторизация")
+        except Exception as e:
+            self.finished.emit(False, {}, f"Ошибка при проверке токена: {str(e)}")
+
+
 class AuthWorker(QThread):
     """Рабочий поток для авторизации"""
 
@@ -123,6 +143,7 @@ class AuthManager(QObject):
         self.user_data: Dict[str, Any] = {}
         self.avatar_worker: Optional[AvatarLoader] = None
         self.auth_worker: Optional[AuthWorker] = None
+        self.token_validate_worker: Optional[TokenValidateWorker] = None
         self.parent_widget = parent
         self.raw_avatar_pixmap: Optional[QPixmap] = None
 
@@ -136,20 +157,24 @@ class AuthManager(QObject):
         self.status_message.emit("Выход из системы выполнен", 3000)
         self.auth_changed.emit()
 
-    def _load_saved_token(self) -> bool:
+    def _load_saved_token(self):
         """Загрузка сохраненного токена авторизации."""
         token_data = self.auth.load_token()
         if token_data and "access_token" in token_data:
             self.api.set_token(token_data["access_token"])
-            if self.auth.validate_token():
-                self.user_data = self.api.get_current_user()
-                self.status_message.emit("Авторизация загружена из сохраненных данных", 3000)
-                return True
-            else:
-                self.status_message.emit(
-                    "Сохраненный токен недействителен, требуется повторная авторизация", 5000
-                )
-        return False
+            self.token_validate_worker = TokenValidateWorker(self.auth)
+            self.token_validate_worker.finished.connect(self._on_token_validated)
+            self.token_validate_worker.start()
+
+    def _on_token_validated(self, success: bool, user_data: dict, message: str):
+        """Обработка результатов проверки токена."""
+        if success:
+            self.user_data = user_data
+            self.status_message.emit(message, 3000)
+            self.auth_changed.emit()
+        else:
+            self.status_message.emit(message, 5000)
+        self.token_validate_worker = None
 
     def show_auth_menu(self, button: QPushButton):
         """Показывает всплывающее меню в зависимости от состояния авторизации."""
