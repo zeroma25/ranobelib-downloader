@@ -225,8 +225,11 @@ class ImageHandler:
     def _get_file_hash(self, filepath: str) -> Optional[str]:
         """Вычисление MD5-хэша содержимого файла."""
         try:
+            hash_md5 = hashlib.md5()
             with open(filepath, "rb") as f:
-                return hashlib.md5(f.read()).hexdigest()
+                for chunk in iter(lambda: f.read(65536), b""):
+                    hash_md5.update(chunk)
+            return hash_md5.hexdigest()
         except OSError as e:
             print(f"\n⚠️ Не удалось вычислить хэш изображения {filepath}: {e}")
             return None 
