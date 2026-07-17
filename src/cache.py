@@ -33,6 +33,7 @@ class ChapterCache:
             db_path = os.path.join(USER_DATA_DIR, "cache", "cache.db")
         self.db_path = db_path
         self._conn = None
+        self._db_lock = threading.Lock()
         self._init_db()
         self._initialized = True
         atexit.register(self.close)
@@ -54,7 +55,7 @@ class ChapterCache:
     def _init_db(self):
         """Инициализация таблиц базы данных."""
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        with self.conn:
+        with self._db_lock, self.conn:
             self.conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS chapters (
@@ -79,7 +80,7 @@ class ChapterCache:
 
     def save_novel_info(self, novel_id: str, name: str):
         """Сохранение информации о новелле для отображения в списке кэша."""
-        with self.conn:
+        with self._db_lock, self.conn:
             self.conn.execute(
                 "INSERT OR REPLACE INTO novels (novel_id, name) VALUES (?, ?)",
                 (str(novel_id), name)
@@ -87,49 +88,52 @@ class ChapterCache:
 
     def get_all_cached_novels(self) -> List[Dict[str, str]]:
         """Возвращает список всех закэшированных новелл."""
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT DISTINCT c.novel_id, n.name 
-            FROM chapters c
-            LEFT JOIN novels n ON c.novel_id = n.novel_id
-            """
-        )
-        return [{"id": row[0], "name": row[1] or f"Новелла {row[0]}"} for row in cursor.fetchall()]
+        with self._db_lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                SELECT DISTINCT c.novel_id, n.name 
+                FROM chapters c
+                LEFT JOIN novels n ON c.novel_id = n.novel_id
+                """
+            )
+            return [{"id": row[0], "name": row[1] or f"Новелла {row[0]}"} for row in cursor.fetchall()]
 
     def get_chapter(
         self, novel_id: str, branch_id: str, volume: str, number: str
     ) -> Optional[Dict[str, Any]]:
         """Получение закэшированной главы."""
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT name, html FROM chapters
-            WHERE novel_id = ? AND branch_id = ? AND volume = ? AND number = ?
-            """,
-            (str(novel_id), str(branch_id), str(volume), str(number)),
-        )
-        row = cursor.fetchone()
-        if row:
-            return {
-                "volume": str(volume),
-                "number": str(number),
-                "name": row[0],
-                "html": row[1],
-            }
-        return None
+        with self._db_lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                SELECT name, html FROM chapters
+                WHERE novel_id = ? AND branch_id = ? AND volume = ? AND number = ?
+                """,
+                (str(novel_id), str(branch_id), str(volume), str(number)),
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "volume": str(volume),
+                    "number": str(number),
+                    "name": row[0],
+                    "html": row[1],
+                }
+            return None
 
     def get_cached_chapters(self, novel_id: str) -> set:
         """Получение набора ключей (branch_id, volume, number) закэшированных глав для новеллы."""
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            SELECT branch_id, volume, number FROM chapters
-            WHERE novel_id = ?
-            """,
-            (str(novel_id),),
-        )
-        return set(cursor.fetchall())
+        with self._db_lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                SELECT branch_id, volume, number FROM chapters
+                WHERE novel_id = ?
+                """,
+                (str(novel_id),),
+            )
+            return set(cursor.fetchall())
 
     def save_chapter(
         self,
@@ -141,7 +145,7 @@ class ChapterCache:
         html: str,
     ):
         """Сохранение главы в кэш."""
-        with self.conn:
+        with self._db_lock, self.conn:
             self.conn.execute(
                 """
                 INSERT OR REPLACE INTO chapters (novel_id, branch_id, volume, number, name, html)
@@ -152,7 +156,7 @@ class ChapterCache:
 
     def clear_novel_cache(self, novel_id: str, clear_images: bool = True):
         """Очистка кэша (и изображений) для конкретной новеллы."""
-        with self.conn:
+        with self._db_lock, self.conn:
             self.conn.execute("DELETE FROM chapters WHERE novel_id = ?", (str(novel_id),))
             self.conn.execute("DELETE FROM novels WHERE novel_id = ?", (str(novel_id),))
         
@@ -166,10 +170,11 @@ class ChapterCache:
 
     def clear_all_cache(self, clear_images: bool = True):
         """Очистка всего кэша (и папки temp)."""
-        with self.conn:
-            self.conn.execute("DELETE FROM chapters")
-            self.conn.execute("DELETE FROM novels")
-        self.conn.execute("VACUUM")
+        with self._db_lock:
+            with self.conn:
+                self.conn.execute("DELETE FROM chapters")
+                self.conn.execute("DELETE FROM novels")
+            self.conn.execute("VACUUM")
         
         if clear_images:
             temp_dir = os.path.join(USER_DATA_DIR, "cache")
