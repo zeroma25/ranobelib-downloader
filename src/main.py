@@ -20,6 +20,7 @@ from .branches import (
 from .creators import EpubCreator, Fb2Creator, HtmlCreator, TxtCreator
 from .img import ImageHandler
 from .parser import RanobeLibParser
+from .processing import ContentProcessor
 from .settings import USER_DATA_DIR, settings
 
 
@@ -436,7 +437,7 @@ def _generate_books(
 
 
 def _cleanup_temp_folder(novel_id: Any):
-    """Удаление временной папки текущей сессии."""
+    """Удаление временной папки текущей сессии и очистка кэшей в памяти."""
     temp_dir = os.path.join(USER_DATA_DIR, "cache", f"temp_images_{novel_id}")
     if os.path.exists(temp_dir):
         print("🧹 Очистка временных файлов...")
@@ -445,6 +446,7 @@ def _cleanup_temp_folder(novel_id: Any):
         except OSError as e:
             print(f"⚠️ Не удалось удалить {temp_dir}: {e}")
 
+    ContentProcessor.clear_novel_cache(novel_id)
 
 if __name__ == "__main__":
     try:

@@ -278,9 +278,7 @@ class DownloadWorker(QThread):
             except Exception as e:
                 self.progress_update.emit(f"Не удалось удалить временные файлы: {e}", 0)
 
-        cache_key = (novel_id, None)
-        if cache_key in ContentProcessor._global_cache:
-            ContentProcessor._global_cache.pop(cache_key, None)
+        ContentProcessor.clear_novel_cache(novel_id)
 
 
 

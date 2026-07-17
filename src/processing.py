@@ -110,6 +110,17 @@ class ContentProcessor:
 
     _volumes_count_cache: Dict[Any, int] = {}
 
+    @classmethod
+    def clear_novel_cache(cls, novel_id: Any) -> None:
+        """Полная очистка кэшей для указанной новеллы."""
+        keys_to_remove = [
+            key for key in cls._global_cache if key[0] == novel_id
+        ]
+        for key in keys_to_remove:
+            del cls._global_cache[key]
+
+        cls._volumes_count_cache.pop(novel_id, None)
+
     def get_total_volume_count(
         self,
         novel_info: Dict[str, Any],
