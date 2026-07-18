@@ -62,7 +62,7 @@ class Fb2Creator(ContentProcessor):
 
     def _html_to_fb2(self, html: str) -> Tuple[str, Set[str]]:
         """Базовое преобразование HTML-контента в FB2-разметку."""
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "lxml")
         referenced_images: Set[str] = set()
 
         for img in soup.find_all("img"):

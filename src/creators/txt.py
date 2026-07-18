@@ -93,7 +93,7 @@ class TxtCreator(ContentProcessor):
         """Преобразование HTML-содержимого в простой текст."""
         if not html:
             return ""
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(html, "lxml")
 
         for img in soup.find_all("img"):
             img.decompose()

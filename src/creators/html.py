@@ -381,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     def _embed_images_as_base64(self, html_content: str, image_folder: str) -> str:
         """Встраивание всех изображений в HTML как base64 data URI."""
-        soup = BeautifulSoup(html_content, "html.parser")
+        soup = BeautifulSoup(html_content, "lxml")
         for img in soup.find_all("img"):
             if not isinstance(img, Tag) or not img.has_attr("src"):
                 continue
