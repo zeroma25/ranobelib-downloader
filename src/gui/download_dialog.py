@@ -257,9 +257,9 @@ class DownloadWorker(QThread):
                         "add_translator", creator.content_processor.add_translator
                     )
 
-                ContentProcessor._global_cache = {
-                    (self.novel_info.get("id"), None): self.prepared_chapters
-                }
+                ContentProcessor.update_global_cache(
+                    self.novel_info.get("id"), None, self.prepared_chapters
+                )
 
                 filename = creator.create(self.novel_info, self.prepared_chapters, None)
 

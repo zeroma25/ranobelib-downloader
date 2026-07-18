@@ -4,6 +4,7 @@
 
 import os
 import re
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 from bs4 import BeautifulSoup, Tag
@@ -18,6 +19,7 @@ from .settings import USER_DATA_DIR, settings
 class ContentProcessor:
     """Класс для получения, обработки и подготовки контента новеллы"""
 
+    _cache_lock = threading.Lock()
     _global_cache: Dict[Tuple[Any, Optional[str]], List[Dict[str, Any]]] = {}
 
     def __init__(self, api: RanobeLibAPI, parser: RanobeLibParser, image_handler: ImageHandler):
@@ -47,8 +49,9 @@ class ContentProcessor:
         self.update_settings()
 
         cache_key = (novel_info.get("id"), selected_branch_id)
-        if cache_key in self._global_cache:
-            return self._global_cache[cache_key]
+        with self._cache_lock:
+            if cache_key in self._global_cache:
+                return self._global_cache[cache_key]
 
         print("🔄 Обработка глав...")
         filtered = self._filter_chapters(chapters_data, selected_branch_id)
@@ -61,7 +64,8 @@ class ContentProcessor:
                 self._process_single_chapter(ch_data, novel_info, image_folder)
             )
 
-        self._global_cache[cache_key] = prepared
+        with self._cache_lock:
+            self._global_cache[cache_key] = prepared
 
         return prepared
 
@@ -113,13 +117,20 @@ class ContentProcessor:
     @classmethod
     def clear_novel_cache(cls, novel_id: Any) -> None:
         """Полная очистка кэшей для указанной новеллы."""
-        keys_to_remove = [
-            key for key in cls._global_cache if key[0] == novel_id
-        ]
-        for key in keys_to_remove:
-            del cls._global_cache[key]
+        with cls._cache_lock:
+            keys_to_remove = [
+                key for key in cls._global_cache if key[0] == novel_id
+            ]
+            for key in keys_to_remove:
+                del cls._global_cache[key]
 
-        cls._volumes_count_cache.pop(novel_id, None)
+            cls._volumes_count_cache.pop(novel_id, None)
+
+    @classmethod
+    def update_global_cache(cls, novel_id: Any, branch_id: Optional[str], prepared_chapters: List[Dict[str, Any]]) -> None:
+        """Безопасное обновление глобального кэша для указанной новеллы и ветки."""
+        with cls._cache_lock:
+            cls._global_cache[(novel_id, branch_id)] = prepared_chapters
 
     def get_total_volume_count(
         self,
@@ -128,8 +139,9 @@ class ContentProcessor:
     ) -> int:
         """Возвращает количество уникальных томов во всей новелле."""
         novel_id = novel_info.get("id")
-        if novel_id in self._volumes_count_cache:
-            return self._volumes_count_cache[novel_id]
+        with self._cache_lock:
+            if novel_id in self._volumes_count_cache:
+                return self._volumes_count_cache[novel_id]
 
         if not chapters_data:
             slug = novel_info.get("slug_url") or f"{novel_info.get('id')}--{novel_info.get('slug')}"
@@ -144,7 +156,9 @@ class ContentProcessor:
         if total_volumes == 0:
             total_volumes = 1
 
-        self._volumes_count_cache[novel_id] = total_volumes
+        with self._cache_lock:
+            self._volumes_count_cache[novel_id] = total_volumes
+
         return total_volumes
 
     def prepare_dirs(self, novel_id: Any) -> Tuple[str, str]:
