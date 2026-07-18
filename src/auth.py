@@ -10,6 +10,7 @@ import secrets
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
+from cryptography.fernet import Fernet
 import keyring
 import keyring.errors
 import requests
@@ -25,7 +26,9 @@ class RanobeLibAuth:
         self.api = api
         self.keyring_service = "ranobelib-downloader"
         self.keyring_username = "auth_token"
-        self.fallback_token_path = os.path.join(USER_DATA_DIR, "auth.json")
+        self.fallback_token_path = os.path.join(USER_DATA_DIR, "auth.enc")
+        self.legacy_token_path = os.path.join(USER_DATA_DIR, "auth.json")
+        self._ephemeral_fernet_key: Optional[bytes] = None
 
     def generate_auth_details(self) -> Dict[str, str]:
         """Генерация данных для авторизации (URL, секрет и др.)."""
@@ -136,27 +139,30 @@ class RanobeLibAuth:
 
         return self.finish_authorization(auth_data)
 
-    def save_token(self, token_data: Dict[str, Any]) -> None:
+    def save_token(self, token_data: Dict[str, Any], skip_keyring: bool = False) -> None:
         """Сохранение данных аутентификации (keyring с фолбэком на файл)."""
         saved_to_keyring = False
-        try:
-            token_json = json.dumps(token_data)
-            chunk_size = 1000
-            chunks = [token_json[i:i + chunk_size] for i in range(0, len(token_json), chunk_size)]
-            
-            keyring.set_password(self.keyring_service, f"{self.keyring_username}_count", str(len(chunks)))
-            for i, chunk in enumerate(chunks):
-                keyring.set_password(self.keyring_service, f"{self.keyring_username}_{i}", chunk)
-            saved_to_keyring = True
-        except Exception as e:
-            print(f"⚠️ Не удалось сохранить токен в keyring (используем фолбэк): {e}")
+        if not skip_keyring:
+            try:
+                token_json = json.dumps(token_data)
+                chunk_size = 1000
+                chunks = [token_json[i:i + chunk_size] for i in range(0, len(token_json), chunk_size)]
+                
+                keyring.set_password(self.keyring_service, f"{self.keyring_username}_count", str(len(chunks)))
+                for i, chunk in enumerate(chunks):
+                    keyring.set_password(self.keyring_service, f"{self.keyring_username}_{i}", chunk)
+                saved_to_keyring = True
+            except Exception as e:
+                print(f"⚠️ Не удалось сохранить токен в keyring (используем фолбэк): {e}")
 
         if not saved_to_keyring:
             try:
-                with open(self.fallback_token_path, "w", encoding="utf-8") as f:
-                    json.dump(token_data, f, indent=2)
-            except OSError as e:
-                print(f"⚠️ Фолбэк также не удался. Не удалось сохранить токен в файл: {e}")
+                fernet = self._get_fernet()
+                encrypted_data = fernet.encrypt(json.dumps(token_data).encode("utf-8"))
+                with open(self.fallback_token_path, "wb") as f:
+                    f.write(encrypted_data)
+            except Exception as e:
+                print(f"⚠️ Фолбэк также не удался. Не удалось сохранить токен в зашифрованный файл: {e}")
 
     def logout(self) -> None:
         """Выход из системы: удаление токена из всех хранилищ."""
@@ -183,12 +189,13 @@ class RanobeLibAuth:
         except Exception as e:
             print(f"⚠️ Ошибка при удалении токена из keyring: {e}")
 
-        if os.path.exists(self.fallback_token_path):
-            try:
-                os.remove(self.fallback_token_path)
-                print("🗑️ Файл токена (фолбэк) удален.")
-            except OSError as e:
-                print(f"⚠️ Не удалось удалить файл токена: {e}")
+        for path in [self.fallback_token_path, self.legacy_token_path]:
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                    print(f"🗑️ Файл токена ({os.path.basename(path)}) удален.")
+                except OSError as e:
+                    print(f"⚠️ Не удалось удалить файл токена {os.path.basename(path)}: {e}")
 
     def load_token(self) -> Optional[Dict[str, Any]]:
         """Загрузка данных аутентификации (keyring -> фолбэк-файл)."""
@@ -207,21 +214,31 @@ class RanobeLibAuth:
         except Exception as e:
             print(f"⚠️ Ошибка доступа к keyring при загрузке: {e}")
 
-        if not token_data and os.path.exists(self.fallback_token_path):
-            try:
-                with open(self.fallback_token_path, "r", encoding="utf-8") as f:
-                    token_data = json.load(f)
-                    
-                if token_data:
-                    try:
-                        self.save_token(token_data)
-                        if keyring.get_password(self.keyring_service, f"{self.keyring_username}_count"):
-                            os.remove(self.fallback_token_path)
-                            print("✅ Токен успешно мигрирован из auth.json в keyring. Файл удален.")
-                    except Exception as e:
-                        print(f"⚠️ Миграция в keyring не удалась (продолжаем использовать файл): {e}")
-            except (OSError, json.JSONDecodeError) as e:
-                print(f"⚠️ Не удалось загрузить токен из файла: {e}")
+        if not token_data:
+            if os.path.exists(self.fallback_token_path):
+                try:
+                    with open(self.fallback_token_path, "rb") as f:
+                        encrypted_data = f.read()
+                    fernet = self._get_fernet()
+                    decrypted_data = fernet.decrypt(encrypted_data)
+                    token_data = json.loads(decrypted_data.decode("utf-8"))
+                except Exception as e:
+                    print(f"⚠️ Не удалось расшифровать токен из файла: {e}")
+
+            if not token_data and os.path.exists(self.legacy_token_path):
+                try:
+                    with open(self.legacy_token_path, "r", encoding="utf-8") as f:
+                        token_data = json.load(f)
+                        
+                    if token_data:
+                        try:
+                            self.save_token(token_data)
+                            os.remove(self.legacy_token_path)
+                            print("✅ Токен успешно мигрирован и старый файл удален.")
+                        except Exception as e:
+                            print(f"⚠️ Миграция не удалась: {e}")
+                except (OSError, json.JSONDecodeError) as e:
+                    print(f"⚠️ Не удалось загрузить токен из старого файла: {e}")
 
         return token_data
 
@@ -302,4 +319,40 @@ class RanobeLibAuth:
             return response.json()
         except requests.exceptions.RequestException as e:
             print(f"⚠️ Не удалось получить токен: {e}")
-            return None 
+            return None
+
+    def _get_fernet(self) -> Fernet:
+        """Получение объекта Fernet со случайным секретом для устройства."""
+        if self._ephemeral_fernet_key:
+            return Fernet(self._ephemeral_fernet_key)
+
+        secret_path = os.path.join(USER_DATA_DIR, ".auth_key")
+        
+        if not os.path.exists(secret_path):
+            key = Fernet.generate_key()
+            try:
+                fd = os.open(secret_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with open(fd, "wb") as f:
+                    f.write(key)
+                
+                if os.name == "nt":
+                    try:
+                        import ctypes
+                        FILE_ATTRIBUTE_HIDDEN = 0x02
+                        ctypes.windll.kernel32.SetFileAttributesW(str(secret_path), FILE_ATTRIBUTE_HIDDEN)
+                    except Exception:
+                        pass
+            except OSError as e:
+                print(f"⚠️ Не удалось создать файл секрета: {e}")
+                self._ephemeral_fernet_key = key
+                return Fernet(key)
+        else:
+            try:
+                with open(secret_path, "rb") as f:
+                    key = f.read().strip()
+            except OSError as e:
+                print(f"⚠️ Не удалось прочитать файл секрета: {e}")
+                key = Fernet.generate_key()
+                self._ephemeral_fernet_key = key
+                
+        return Fernet(key) 
