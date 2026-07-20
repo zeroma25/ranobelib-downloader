@@ -6,8 +6,8 @@ import json
 import os
 from typing import Any, Dict, Optional
 
-APP_ROOT = os.path.abspath(".")
-USER_DATA_DIR = os.path.abspath("data")
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+USER_DATA_DIR = os.path.join(APP_ROOT, "data")
 os.makedirs(USER_DATA_DIR, exist_ok=True)
 
 

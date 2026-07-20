@@ -160,7 +160,7 @@ class SettingsWidget(QWidget):
         path_layout = QHBoxLayout()
         self.path_edit = QLineEdit()
         self.path_edit.setMinimumHeight(28)
-        self.path_edit.setText(os.path.abspath("downloads"))
+        self.path_edit.setText("downloads")
         self.path_edit.setReadOnly(True)
         path_layout.addWidget(self.path_edit)
 
