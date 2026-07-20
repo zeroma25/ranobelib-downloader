@@ -7,7 +7,7 @@ import re
 import shutil
 import signal
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from . import __version__
 from .api import OperationCancelledError, RanobeLibAPI
@@ -285,7 +285,7 @@ def _select_branch(branches: Dict, chapters_data: List[Dict[str, Any]]) -> Optio
             print("⚠️ Пожалуйста, введите число")
 
 
-def _select_output_formats(creators: List[Any]) -> List[Any]:
+def _select_output_formats(creators: List[Any]) -> Union[List[Any], str]:
     """Выбор форматов для сохранения книги."""
     if not creators:
         return []
