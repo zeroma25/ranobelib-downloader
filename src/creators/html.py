@@ -189,10 +189,8 @@ class HtmlCreator(ContentProcessor):
             f'<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
             f"<title>{decoded_title}</title>\n"
             f"{style}\n"
+            f"{js_script}\n"
             "</head>"
-            "<body>"
-            f"{js_script}"
-            "</body>"
         )
 
     def _create_html_body(
@@ -403,4 +401,4 @@ document.addEventListener('DOMContentLoaded', () => {
             else:
                 print(f"⚠️ Изображение не найдено для встраивания: {image_path}")
 
-        return str(soup) 
+        return str(soup.body) if soup.body else str(soup)
