@@ -177,15 +177,21 @@ def _handle_authentication(auth: RanobeLibAuth):
         print("ℹ️ Продолжаем без авторизации (часть контента может быть недоступна)")
 
 
+_BOOL_SETTINGS = [
+    ("cache_chapters", "Использовать локальный кэш", "Использовать локальный кэш?", True),
+    ("download_cover", "Скачивать обложку", "Скачивать обложку?", False),
+    ("download_images", "Скачивать изображения", "Скачивать изображения из глав?", False),
+    ("compress_images", "Сжимать изображения", "Сжимать изображения?", False),
+    ("add_translator", "Добавлять данные о переводчике", "Добавлять данные о переводчике?", False),
+    ("group_by_volumes", "Группировать по томам", "Группировать главы по томам?", False),
+]
+
+
 def _show_settings():
     """Отображение текущих настроек."""
     print("⚙️ Текущие настройки:")
-    print(f"  • Использовать локальный кэш: {'✅' if settings.get('cache_chapters', True) else '❌'}")
-    print(f"  • Скачивать обложку: {'✅' if settings.get('download_cover') else '❌'}")
-    print(f"  • Скачивать изображения: {'✅' if settings.get('download_images') else '❌'}")
-    print(f"  • Сжимать изображения: {'✅' if settings.get('compress_images') else '❌'}")
-    print(f"  • Добавлять данные о переводчике: {'✅' if settings.get('add_translator') else '❌'}")
-    print(f"  • Группировать по томам: {'✅' if settings.get('group_by_volumes') else '❌'}")
+    for key, display_name, _, default_val in _BOOL_SETTINGS:
+        print(f"  • {display_name}: {'✅' if settings.get(key, default_val) else '❌'}")
     print(f"  • Каталог для сохранения: {settings.get('save_directory')}")
 
 
@@ -199,66 +205,21 @@ def _change_settings():
     """Изменение настроек пользователем."""
     print("⚙️ Изменение настроек:")
 
-    choice = (
-        input(f"  Использовать локальный кэш? (y/n) [{('y' if settings.get('cache_chapters', True) else 'n')}]: ")
-        .strip()
-        .lower()
-    )
-    if choice:
-        settings.set("cache_chapters", choice in {"y", "yes", "да", "д", "1"})
+    for key, _, prompt, default_val in _BOOL_SETTINGS:
+        current_val = settings.get(key, default_val)
+        choice = input(f"  {prompt} (y/n) [{('y' if current_val else 'n')}]: ").strip().lower()
+        if choice:
+            settings.set(key, choice in {"y", "yes", "да", "д", "1"})
 
-    choice = (
-        input("  Очистить весь кэш загрузок прямо сейчас? (y/n) [n]: ")
-        .strip()
-        .lower()
-    )
-    if choice in {"y", "yes", "да", "д", "1"}:
-        try:
-            from .cache import ChapterCache
-            ChapterCache().clear_all_cache()
-            print("✅ Кэш очищен")
-        except Exception as e:
-            print(f"❌ Не удалось очистить кэш: {e}")
-
-    choice = (
-        input(f"  Скачивать обложку? (y/n) [{('y' if settings.get('download_cover') else 'n')}]: ")
-        .strip()
-        .lower()
-    )
-    if choice:
-        settings.set("download_cover", choice in {"y", "yes", "да", "д", "1"})
-
-    choice = (
-        input(f"  Скачивать изображения из глав? (y/n) [{('y' if settings.get('download_images') else 'n')}]: ")
-        .strip()
-        .lower()
-    )
-    if choice:
-        settings.set("download_images", choice in {"y", "yes", "да", "д", "1"})
-
-    choice = (
-        input(f"  Сжимать изображения? (y/n) [{('y' if settings.get('compress_images') else 'n')}]: ")
-        .strip()
-        .lower()
-    )
-    if choice:
-        settings.set("compress_images", choice in {"y", "yes", "да", "д", "1"})
-
-    choice = (
-        input(f"  Добавлять данные о переводчике? (y/n) [{('y' if settings.get('add_translator') else 'n')}]: ")
-        .strip()
-        .lower()
-    )
-    if choice:
-        settings.set("add_translator", choice in {"y", "yes", "да", "д", "1"})
-
-    choice = (
-        input(f"  Группировать главы по томам? (y/n) [{('y' if settings.get('group_by_volumes') else 'n')}]: ")
-        .strip()
-        .lower()
-    )
-    if choice:
-        settings.set("group_by_volumes", choice in {"y", "yes", "да", "д", "1"})
+        if key == "cache_chapters":
+            clear_choice = input("  Очистить весь кэш загрузок прямо сейчас? (y/n) [n]: ").strip().lower()
+            if clear_choice in {"y", "yes", "да", "д", "1"}:
+                try:
+                    from .cache import ChapterCache
+                    ChapterCache().clear_all_cache()
+                    print("✅ Кэш очищен")
+                except Exception as e:
+                    print(f"❌ Не удалось очистить кэш: {e}")
 
     current_dir = settings.get("save_directory")
     new_dir = input(f"  Каталог для сохранения [{current_dir}]: ").strip()
