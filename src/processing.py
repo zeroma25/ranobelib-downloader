@@ -16,58 +16,59 @@ from .parser import RanobeLibParser
 from .settings import USER_DATA_DIR, settings
 
 
-class ContentProcessor:
-    """Класс для получения, обработки и подготовки контента новеллы"""
-
-    _cache_lock = threading.Lock()
-    _global_cache: Dict[Tuple[Any, Optional[str]], List[Dict[str, Any]]] = {}
-
-    def __init__(self, api: RanobeLibAPI, parser: RanobeLibParser, image_handler: ImageHandler):
-        self.api = api
-        self.parser = parser
-        self.image_handler = image_handler
-        self.cache = ChapterCache()
+class FileManager:
+    """Управление файлами и директориями."""
+    
+    def __init__(self):
         self.override_image_folder = None
         self.update_settings()
 
     def update_settings(self):
-        """Обновление настроек из модуля settings"""
         self.cache_chapters = settings.get("cache_chapters", True)
-        self.download_cover_enabled = settings.get("download_cover")
-        self.download_images_enabled = settings.get("download_images")
-        self.group_by_volumes = settings.get("group_by_volumes")
-        self.add_translator = settings.get("add_translator")
 
-    def prepare_chapters(
-        self,
-        novel_info: Dict[str, Any],
-        chapters_data: List[Dict[str, Any]],
-        selected_branch_id: Optional[str],
-        image_folder: str,
-    ) -> List[Dict[str, Any]]:
-        """Получение списка подготовленных глав."""
-        self.update_settings()
+    def prepare_dirs(self, novel_id: Any) -> Tuple[str, str]:
+        """Подготовка каталога загрузок и временного каталога."""
+        downloads_dir = settings.get("save_directory")
+        os.makedirs(downloads_dir, exist_ok=True)
+        
+        if self.override_image_folder:
+            return downloads_dir, self.override_image_folder
+            
+        temp_dir = os.path.join(USER_DATA_DIR, "cache")
+        os.makedirs(temp_dir, exist_ok=True)
+        if self.cache_chapters:
+            image_folder = os.path.join(temp_dir, f"cache_images_{novel_id}")
+        else:
+            image_folder = os.path.join(temp_dir, f"temp_images_{novel_id}")
+        return downloads_dir, image_folder
 
-        cache_key = (novel_info.get("id"), selected_branch_id)
-        with self._cache_lock:
-            if cache_key in self._global_cache:
-                return self._global_cache[cache_key]
+    def get_safe_filename(self, title: str, extension: str) -> str:
+        """Создание безопасного имени файла и обеспечение его уникальности."""
+        safe_title = re.sub(r'[\\/*?:"<>|]', "", title)
+        downloads_dir = settings.get("save_directory")
+        os.makedirs(downloads_dir, exist_ok=True)
+        filename = os.path.join(downloads_dir, f"{safe_title}.{extension}")
+        counter = 1
+        while os.path.exists(filename):
+            filename = os.path.join(downloads_dir, f"{safe_title} ({counter}).{extension}")
+            counter += 1
+        return filename
 
-        print("🔄 Обработка глав...")
-        filtered = self._filter_chapters(chapters_data, selected_branch_id)
 
-        from tqdm import tqdm
+class MetadataExtractor:
+    """Извлечение метаданных о новелле."""
+    
+    _cache_lock = threading.Lock()
+    _volumes_count_cache: Dict[Any, int] = {}
 
-        prepared: List[Dict[str, Any]] = []
-        for i, ch_data in enumerate(tqdm(filtered, desc="⏱️ Загрузка глав", unit="ch", miniters=1, smoothing=0.1)):
-            prepared.append(
-                self._process_single_chapter(ch_data, novel_info, image_folder)
-            )
+    def __init__(self, parser: RanobeLibParser, api: RanobeLibAPI):
+        self.parser = parser
+        self.api = api
 
-        with self._cache_lock:
-            self._global_cache[cache_key] = prepared
-
-        return prepared
+    @classmethod
+    def clear_cache(cls, novel_id: Any) -> None:
+        with cls._cache_lock:
+            cls._volumes_count_cache.pop(novel_id, None)
 
     def extract_title_author_summary(self, novel_info: Dict[str, Any]) -> Tuple[str, str, str, List[str]]:
         """Получение метаданных из информации о новелле."""
@@ -112,26 +113,6 @@ class ContentProcessor:
                 return m.group(0)
         return None
 
-    _volumes_count_cache: Dict[Any, int] = {}
-
-    @classmethod
-    def clear_novel_cache(cls, novel_id: Any) -> None:
-        """Полная очистка кэшей для указанной новеллы."""
-        with cls._cache_lock:
-            keys_to_remove = [
-                key for key in cls._global_cache if key[0] == novel_id
-            ]
-            for key in keys_to_remove:
-                del cls._global_cache[key]
-
-            cls._volumes_count_cache.pop(novel_id, None)
-
-    @classmethod
-    def update_global_cache(cls, novel_id: Any, branch_id: Optional[str], prepared_chapters: List[Dict[str, Any]]) -> None:
-        """Безопасное обновление глобального кэша для указанной новеллы и ветки."""
-        with cls._cache_lock:
-            cls._global_cache[(novel_id, branch_id)] = prepared_chapters
-
     def get_total_volume_count(
         self,
         novel_info: Dict[str, Any],
@@ -161,48 +142,19 @@ class ContentProcessor:
 
         return total_volumes
 
-    def prepare_dirs(self, novel_id: Any) -> Tuple[str, str]:
-        """Подготовка каталога загрузок и временного каталога."""
-        downloads_dir = settings.get("save_directory")
-        os.makedirs(downloads_dir, exist_ok=True)
-        
-        if self.override_image_folder:
-            return downloads_dir, self.override_image_folder
-            
-        temp_dir = os.path.join(USER_DATA_DIR, "cache")
-        os.makedirs(temp_dir, exist_ok=True)
-        if self.cache_chapters:
-            image_folder = os.path.join(temp_dir, f"cache_images_{novel_id}")
-        else:
-            image_folder = os.path.join(temp_dir, f"temp_images_{novel_id}")
-        return downloads_dir, image_folder
 
-    def get_safe_filename(self, title: str, extension: str) -> str:
-        """Создание безопасного имени файла и обеспечение его уникальности."""
-        safe_title = re.sub(r'[\\/*?:"<>|]', "", title)
-        downloads_dir = settings.get("save_directory")
-        os.makedirs(downloads_dir, exist_ok=True)
-        filename = os.path.join(downloads_dir, f"{safe_title}.{extension}")
-        counter = 1
-        while os.path.exists(filename):
-            filename = os.path.join(downloads_dir, f"{safe_title} ({counter}).{extension}")
-            counter += 1
-        return filename
+class HtmlProcessor:
+    """Обработка HTML контента."""
+    
+    def __init__(self, image_handler: ImageHandler, parser: RanobeLibParser):
+        self.image_handler = image_handler
+        self.parser = parser
+        self.update_settings()
 
-    def download_cover(self, novel_info: Dict[str, Any], image_folder: str) -> Optional[str]:
-        """Скачивание обложки."""
-        if not self.download_cover_enabled:
-            return None
+    def update_settings(self):
+        self.download_images_enabled = settings.get("download_images")
 
-        cover_filename: Optional[str] = None
-        if novel_info.get("cover") and novel_info["cover"].get("default"):
-            cover_url = novel_info["cover"]["default"]
-            cover_filename = self.image_handler.download_image(
-                url=cover_url, folder=image_folder, filename="cover", deduplicate=True
-            )
-        return cover_filename
-
-    def _process_html_images(self, html_content: str, image_folder: str, branch_id: str) -> str:
+    def process_html_images(self, html_content: str, image_folder: str, branch_id: str) -> str:
         """Обработка HTML-контента: скачивание изображений, обновление путей и обработка дубликатов."""
         soup = BeautifulSoup(html_content, "lxml")
         for img in soup.find_all("img"):
@@ -231,7 +183,7 @@ class ContentProcessor:
 
         return str(soup)
 
-    def _convert_br_to_paragraphs(self, html: str) -> str:
+    def convert_br_to_paragraphs(self, html: str) -> str:
         """Замена разрывов строк <br> на абзацы <p>...</p>."""
         if not html:
             return ""
@@ -255,6 +207,105 @@ class ContentProcessor:
             output_parts.append(f"<p>{text}</p>")
 
         return "".join(output_parts)
+
+    def cleanup_html_text(self, html: str) -> str:
+        """Очистка текста внутри HTML от лишних переносов строк, пробелов и тегов."""
+        if not html:
+            return ""
+        soup = BeautifulSoup(html, "lxml")
+        for text_node in soup.find_all(string=True):
+            if text_node.parent and text_node.parent.name in ["style", "script", "pre"]:
+                continue
+
+            current_text = str(text_node)
+            new_text = re.sub(" +", " ", current_text.replace("\n", " "))
+
+            if new_text != current_text:
+                text_node.replace_with(new_text)  # type: ignore
+
+        for p_tag in soup.find_all("p"):
+            if isinstance(p_tag, Tag) and p_tag.has_attr("data-paragraph-index"):  # type: ignore[attr-defined]
+                del p_tag["data-paragraph-index"]  # type: ignore[index]
+
+        return str(soup)
+
+
+class ChapterLoader:
+    """Загрузка и подготовка глав."""
+    
+    _cache_lock = threading.Lock()
+    _global_cache: Dict[Tuple[Any, Optional[str]], List[Dict[str, Any]]] = {}
+
+    def __init__(self, api: RanobeLibAPI, parser: RanobeLibParser, image_handler: ImageHandler, html_processor: HtmlProcessor):
+        self.api = api
+        self.parser = parser
+        self.image_handler = image_handler
+        self.html_processor = html_processor
+        self.cache = ChapterCache()
+        self.update_settings()
+
+    def update_settings(self):
+        self.cache_chapters = settings.get("cache_chapters", True)
+        self.download_cover_enabled = settings.get("download_cover")
+        self.add_translator = settings.get("add_translator")
+
+    @classmethod
+    def clear_cache(cls, novel_id: Any) -> None:
+        with cls._cache_lock:
+            keys_to_remove = [
+                key for key in cls._global_cache if key[0] == novel_id
+            ]
+            for key in keys_to_remove:
+                del cls._global_cache[key]
+
+    @classmethod
+    def update_global_cache(cls, novel_id: Any, branch_id: Optional[str], prepared_chapters: List[Dict[str, Any]]) -> None:
+        with cls._cache_lock:
+            cls._global_cache[(novel_id, branch_id)] = prepared_chapters
+
+    def download_cover(self, novel_info: Dict[str, Any], image_folder: str) -> Optional[str]:
+        """Скачивание обложки."""
+        if not self.download_cover_enabled:
+            return None
+
+        cover_filename: Optional[str] = None
+        if novel_info.get("cover") and novel_info["cover"].get("default"):
+            cover_url = novel_info["cover"]["default"]
+            cover_filename = self.image_handler.download_image(
+                url=cover_url, folder=image_folder, filename="cover", deduplicate=True
+            )
+        return cover_filename
+
+    def prepare_chapters(
+        self,
+        novel_info: Dict[str, Any],
+        chapters_data: List[Dict[str, Any]],
+        selected_branch_id: Optional[str],
+        image_folder: str,
+    ) -> List[Dict[str, Any]]:
+        """Получение списка подготовленных глав."""
+        self.update_settings()
+
+        cache_key = (novel_info.get("id"), selected_branch_id)
+        with self._cache_lock:
+            if cache_key in self._global_cache:
+                return self._global_cache[cache_key]
+
+        print("🔄 Обработка глав...")
+        filtered = self._filter_chapters(chapters_data, selected_branch_id)
+
+        from tqdm import tqdm
+
+        prepared: List[Dict[str, Any]] = []
+        for i, ch_data in enumerate(tqdm(filtered, desc="⏱️ Загрузка глав", unit="ch", miniters=1, smoothing=0.1)):
+            prepared.append(
+                self._process_single_chapter(ch_data, novel_info, image_folder)
+            )
+
+        with self._cache_lock:
+            self._global_cache[cache_key] = prepared
+
+        return prepared
 
     def _parse_chapter_number(self, number_str: str) -> tuple:
         """Преобразование строки номера главы в кортеж чисел для сортировки."""
@@ -335,9 +386,9 @@ class ContentProcessor:
 
     def _prepare_chapter_content(self, html: str, image_folder: str, branch_id: str) -> str:
         """Скачивание изображений, замена путей и перевод <br> в параграфы."""
-        html_with_images = self._process_html_images(html, image_folder, branch_id)
-        html_cleaned = self._cleanup_html_text(html_with_images)
-        return self._convert_br_to_paragraphs(html_cleaned)
+        html_with_images = self.html_processor.process_html_images(html, image_folder, branch_id)
+        html_cleaned = self.html_processor.cleanup_html_text(html_with_images)
+        return self.html_processor.convert_br_to_paragraphs(html_cleaned)
 
     def _process_single_chapter(
         self,
@@ -438,23 +489,43 @@ class ContentProcessor:
 
         return result
 
-    def _cleanup_html_text(self, html: str) -> str:
-        """Очистка текста внутри HTML от лишних переносов строк, пробелов и тегов."""
-        if not html:
-            return ""
-        soup = BeautifulSoup(html, "lxml")
-        for text_node in soup.find_all(string=True):
-            if text_node.parent and text_node.parent.name in ["style", "script", "pre"]:
-                continue
 
-            current_text = str(text_node)
-            new_text = re.sub(" +", " ", current_text.replace("\n", " "))
+class ContentProcessor:
+    """Фасад для доступа к компонентам обработки контента."""
+    
+    def __init__(self, api: RanobeLibAPI, parser: RanobeLibParser, image_handler: ImageHandler):
+        self.api = api
+        self.parser = parser
+        self.image_handler = image_handler
+        
+        self.file_manager = FileManager()
+        self.metadata_extractor = MetadataExtractor(parser, api)
+        self.html_processor = HtmlProcessor(image_handler, parser)
+        self.chapter_loader = ChapterLoader(api, parser, image_handler, self.html_processor)
+        
+        self.update_settings()
 
-            if new_text != current_text:
-                text_node.replace_with(new_text)  # type: ignore
+    @property
+    def override_image_folder(self):
+        return self.file_manager.override_image_folder
+        
+    @override_image_folder.setter
+    def override_image_folder(self, value):
+        self.file_manager.override_image_folder = value
 
-        for p_tag in soup.find_all("p"):
-            if isinstance(p_tag, Tag) and p_tag.has_attr("data-paragraph-index"):  # type: ignore[attr-defined]
-                del p_tag["data-paragraph-index"]  # type: ignore[index]
+    def update_settings(self):
+        """Обновление настроек во всех подсистемах."""
+        self.file_manager.update_settings()
+        self.html_processor.update_settings()
+        self.chapter_loader.update_settings()
+        
+    @classmethod
+    def clear_novel_cache(cls, novel_id: Any) -> None:
+        """Полная очистка кэшей для указанной новеллы."""
+        ChapterLoader.clear_cache(novel_id)
+        MetadataExtractor.clear_cache(novel_id)
 
-        return str(soup) 
+    @classmethod
+    def update_global_cache(cls, novel_id: Any, branch_id: Optional[str], prepared_chapters: List[Dict[str, Any]]) -> None:
+        """Безопасное обновление глобального кэша для указанной новеллы и ветки."""
+        ChapterLoader.update_global_cache(novel_id, branch_id, prepared_chapters)

@@ -80,7 +80,7 @@ class ContentLoader(QThread):
                 if cached and cached.get("html"):
                     is_from_cache = True
 
-                processed_chapter = processor._process_single_chapter(ch_data, self.novel_info, image_folder)
+                processed_chapter = processor.chapter_loader._process_single_chapter(ch_data, self.novel_info, image_folder)
                 html_content = processed_chapter.get("html", "")
 
                 if not html_content:

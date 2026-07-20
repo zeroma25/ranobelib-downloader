@@ -128,14 +128,15 @@ class DownloadWorker(QThread):
         processor = ContentProcessor(self.api, self.parser, self.image_handler)
         processor.update_settings()
 
-        processor.download_cover_enabled = self.options.get(
-            "download_cover", processor.download_cover_enabled
+        processor.chapter_loader.download_cover_enabled = self.options.get(
+            "download_cover", processor.chapter_loader.download_cover_enabled
         )
-        processor.download_images_enabled = self.options.get(
-            "download_images", processor.download_images_enabled
+        processor.html_processor.download_images_enabled = self.options.get(
+            "download_images", processor.html_processor.download_images_enabled
         )
-        processor.group_by_volumes = self.options.get("group_by_volumes", processor.group_by_volumes)
-        processor.add_translator = self.options.get("add_translator", processor.add_translator)
+        processor.chapter_loader.add_translator = self.options.get(
+            "add_translator", processor.chapter_loader.add_translator
+        )
 
         non_cached_chapters_done = 0
         total_download_time = 0.0
@@ -167,7 +168,7 @@ class DownloadWorker(QThread):
 
             start_chapter_time = time.time()
 
-            prepared_chapter = processor._process_single_chapter(
+            prepared_chapter = processor.chapter_loader._process_single_chapter(
                 {"chapter": chapter_info, "branch": branch_info},
                 self.novel_info,
                 self._temp_dir,
@@ -217,11 +218,23 @@ class DownloadWorker(QThread):
                 self.image_handler.compress_folder(source_folder, target_folder)
                 override_folder = target_folder
 
+        processor = ContentProcessor(self.api, self.parser, self.image_handler)
+        processor.update_settings()
+        processor.chapter_loader.download_cover_enabled = self.options.get(
+            "download_cover", processor.chapter_loader.download_cover_enabled
+        )
+        processor.html_processor.download_images_enabled = self.options.get(
+            "download_images", processor.html_processor.download_images_enabled
+        )
+        processor.chapter_loader.add_translator = self.options.get(
+            "add_translator", processor.chapter_loader.add_translator
+        )
+
         creators = {
-            "EPUB": EpubCreator(self.api, self.parser, self.image_handler),
-            "FB2": Fb2Creator(self.api, self.parser, self.image_handler),
-            "HTML": HtmlCreator(self.api, self.parser, self.image_handler),
-            "TXT": TxtCreator(self.api, self.parser, self.image_handler),
+            "EPUB": EpubCreator(processor),
+            "FB2": Fb2Creator(processor),
+            "HTML": HtmlCreator(processor),
+            "TXT": TxtCreator(processor),
         }
 
         total_formats = len(self.selected_formats)
@@ -238,24 +251,7 @@ class DownloadWorker(QThread):
                     continue
                     
                 if override_folder:
-                    creator.override_image_folder = override_folder
-
-                if hasattr(creator, "content_processor"):
-                    creator.content_processor.update_settings()
-
-                if hasattr(creator, "content_processor"):
-                    creator.content_processor.download_cover_enabled = self.options.get(
-                        "download_cover", creator.content_processor.download_cover_enabled
-                    )
-                    creator.content_processor.download_images_enabled = self.options.get(
-                        "download_images", creator.content_processor.download_images_enabled
-                    )
-                    creator.content_processor.group_by_volumes = self.options.get(
-                        "group_by_volumes", creator.content_processor.group_by_volumes
-                    )
-                    creator.content_processor.add_translator = self.options.get(
-                        "add_translator", creator.content_processor.add_translator
-                    )
+                    creator.processor.override_image_folder = override_folder
 
                 ContentProcessor.update_global_cache(
                     self.novel_info.get("id"), None, self.prepared_chapters

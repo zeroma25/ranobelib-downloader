@@ -8,14 +8,15 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ebooklib import epub
 
-from ..processing import ContentProcessor
+from ..settings import settings
 
 
-class EpubCreator(ContentProcessor):
+class EpubCreator:
+    def __init__(self, processor):
+        self.processor = processor
+        self.parser = processor.parser
+
     """Класс для создания EPUB-файлов"""
-
-    def __init__(self, api, parser, image_handler):
-        super().__init__(api, parser, image_handler)
 
     @property
     def format_name(self) -> str:
@@ -30,7 +31,7 @@ class EpubCreator(ContentProcessor):
     ) -> str:
         """Создание EPUB файла с главами новеллы."""
         book = epub.EpubBook()
-        _, image_folder = self.prepare_dirs(novel_info.get("id"))
+        _, image_folder = self.processor.file_manager.prepare_dirs(novel_info.get("id"))
 
         self._set_metadata(book, novel_info)
 
@@ -52,7 +53,7 @@ class EpubCreator(ContentProcessor):
         book.add_item(epub.EpubNcx())
 
         title = self.parser.decode_html_entities(book.title)
-        epub_filename = self.get_safe_filename(title, "epub")
+        epub_filename = self.processor.file_manager.get_safe_filename(title, "epub")
 
         epub.write_epub(epub_filename, book, {})
 
@@ -60,7 +61,7 @@ class EpubCreator(ContentProcessor):
 
     def _set_metadata(self, book: epub.EpubBook, novel_info: Dict[str, Any]):
         """Установка метаданных для EPUB книги."""
-        title, author, summary, genres = self.extract_title_author_summary(novel_info)
+        title, author, summary, genres = self.processor.metadata_extractor.extract_title_author_summary(novel_info)
         book.set_identifier(f"ranobelib-{novel_info.get('id')}")
         book.set_title(title)
         if author:
@@ -69,7 +70,7 @@ class EpubCreator(ContentProcessor):
             book.add_metadata("DC", "description", summary)
         if genres:
             book.add_metadata("DC", "subject", ", ".join(genres))
-        year_str = self.extract_year(novel_info)
+        year_str = self.processor.metadata_extractor.extract_year(novel_info)
         if year_str:
             book.add_metadata("DC", "date", year_str)
 
@@ -77,7 +78,7 @@ class EpubCreator(ContentProcessor):
         self, book: epub.EpubBook, novel_info: Dict[str, Any], image_folder: str
     ) -> Optional[epub.EpubItem]:
         """Скачивание и создание страницы с обложкой."""
-        cover_path = self.download_cover(novel_info, image_folder)
+        cover_path = self.processor.chapter_loader.download_cover(novel_info, image_folder)
         if not cover_path:
             return None
 
@@ -118,18 +119,18 @@ class EpubCreator(ContentProcessor):
         referenced_images: Set[str] = set()
         volume_chapters: Dict[str, List[Any]] = {}
 
-        prepared_chapters = self.prepare_chapters(
+        prepared_chapters = self.processor.chapter_loader.prepare_chapters(
             novel_info, chapters_data, selected_branch_id, image_folder
         )
 
-        total_volumes = self.get_total_volume_count(novel_info)
+        total_volumes = self.processor.metadata_extractor.get_total_volume_count(novel_info)
 
         print("📦 Создание EPUB...")
         for i, prep in enumerate(prepared_chapters):
             ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
             vol_num = str(prep["volume"])
 
-            if total_volumes > 1 and not self.group_by_volumes and vol_num != "0":
+            if total_volumes > 1 and not settings.get("group_by_volumes") and vol_num != "0":
                 chapter_title = f'Том {vol_num} Глава {prep["number"]}'
             else:
                 chapter_title = f'Глава {prep["number"]}'
@@ -149,7 +150,7 @@ class EpubCreator(ContentProcessor):
             for img_filename in re.findall(r"src=['\"]images/([^'\"]+)['\"]", prep["html"]):
                 referenced_images.add(img_filename)
 
-        if self.group_by_volumes and total_volumes > 1 and volume_chapters:
+        if settings.get("group_by_volumes") and total_volumes > 1 and volume_chapters:
             for vol_num in sorted(volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0):
                 toc.append((epub.Section(f"Том {vol_num}"), tuple(volume_chapters[vol_num])))
         elif volume_chapters:

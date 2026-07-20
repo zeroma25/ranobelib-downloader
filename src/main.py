@@ -53,11 +53,12 @@ def run_cli():
 
     signal.signal(signal.SIGINT, signal_handler)
 
+    processor = ContentProcessor(api, parser, image_handler)
     creators = [
-        EpubCreator(api, parser, image_handler),
-        Fb2Creator(api, parser, image_handler),
-        HtmlCreator(api, parser, image_handler),
-        TxtCreator(api, parser, image_handler),
+        EpubCreator(processor),
+        Fb2Creator(processor),
+        HtmlCreator(processor),
+        TxtCreator(processor),
     ]
 
     _print_header()
@@ -113,14 +114,14 @@ def run_cli():
             print("🔄 Загрузка глав...")
             try:
                 creator = creators[0]
-                creator.update_settings()
-                _, image_folder = creator.prepare_dirs(novel_info.get("id"))
+                creator.processor.update_settings()
+                _, image_folder = creator.processor.file_manager.prepare_dirs(novel_info.get("id"))
                 if settings.get("cache_chapters", True):
                     novel_name = novel_info.get("rus_name") or novel_info.get("name")
                     if novel_name:
                         from .cache import ChapterCache
                         ChapterCache().save_novel_info(str(novel_info.get("id")), str(novel_name))
-                creator.prepare_chapters(novel_info, chapters_data, selected_branch_id, image_folder)
+                creator.processor.chapter_loader.prepare_chapters(novel_info, chapters_data, selected_branch_id, image_folder)
                 print("✅ Главы успешно загружены в кэш")
             except OperationCancelledError:
                 raise
@@ -411,22 +412,22 @@ def _generate_books(
     override_folder = None
     
     if creators:
-        creators[0].update_settings()
-        _, image_folder = creators[0].prepare_dirs(novel_id)
-        creators[0].prepare_chapters(novel_info, chapters_data, selected_branch_id, image_folder)
+        creators[0].processor.update_settings()
+        _, image_folder = creators[0].processor.file_manager.prepare_dirs(novel_id)
+        creators[0].processor.chapter_loader.prepare_chapters(novel_info, chapters_data, selected_branch_id, image_folder)
 
     if settings.get("compress_images") and (settings.get("download_images") or settings.get("download_cover")) and creators:
         if settings.get("cache_chapters", True):
             print("Сжатие изображений...")
             target_folder = os.path.join(temp_dir, f"temp_images_{novel_id}")
-            creators[0].image_handler.compress_folder(source_folder, target_folder)
+            creators[0].processor.image_handler.compress_folder(source_folder, target_folder)
             override_folder = target_folder
         
     for creator in creators:
         try:
             if override_folder:
-                creator.override_image_folder = override_folder
-            creator.update_settings()
+                creator.processor.override_image_folder = override_folder
+            creator.processor.update_settings()
 
             filename = creator.create(novel_info, chapters_data, selected_branch_id)
             print(f"✅ {creator.format_name} успешно создан: {filename}")

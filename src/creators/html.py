@@ -9,10 +9,14 @@ from typing import Any, Dict, List, Optional
 
 from bs4 import BeautifulSoup, Tag
 
-from ..processing import ContentProcessor
+from ..settings import settings
 
 
-class HtmlCreator(ContentProcessor):
+class HtmlCreator:
+    def __init__(self, processor):
+        self.processor = processor
+        self.parser = processor.parser
+
     """Класс для создания HTML-файлов"""
 
     @property
@@ -27,12 +31,12 @@ class HtmlCreator(ContentProcessor):
         selected_branch_id: Optional[str] = None,
     ) -> str:
         """Создание HTML файла с главами новеллы."""
-        _, image_folder = self.prepare_dirs(novel_info.get("id"))
+        _, image_folder = self.processor.file_manager.prepare_dirs(novel_info.get("id"))
 
-        prepared_chapters = self.prepare_chapters(
+        prepared_chapters = self.processor.chapter_loader.prepare_chapters(
             novel_info, chapters_data, selected_branch_id, image_folder
         )
-        cover_filename = self.download_cover(novel_info, image_folder)
+        cover_filename = self.processor.chapter_loader.download_cover(novel_info, image_folder)
 
         print(f"📦 Создание {self.format_name}...")
 
@@ -40,8 +44,8 @@ class HtmlCreator(ContentProcessor):
             novel_info, prepared_chapters, cover_filename, image_folder
         )
 
-        title, _, _, _ = self.extract_title_author_summary(novel_info)
-        html_filename = self.get_safe_filename(title, "html")
+        title, _, _, _ = self.processor.metadata_extractor.extract_title_author_summary(novel_info)
+        html_filename = self.processor.file_manager.get_safe_filename(title, "html")
 
         with open(html_filename, "w", encoding="utf-8") as f:
             f.write(full_html)
@@ -56,7 +60,7 @@ class HtmlCreator(ContentProcessor):
         image_folder: str,
     ) -> str:
         """Сборка полного HTML-содержимого книги."""
-        title, _, _, _ = self.extract_title_author_summary(novel_info)
+        title, _, _, _ = self.processor.metadata_extractor.extract_title_author_summary(novel_info)
 
         toc_html = self._create_toc_html(novel_info, prepared_chapters)
         js_script = self._get_javascript()
@@ -201,7 +205,7 @@ class HtmlCreator(ContentProcessor):
         toc_html: str,
     ) -> str:
         """Создание содержимого для <body>."""
-        title, author, summary, _ = self.extract_title_author_summary(novel_info)
+        title, author, summary, _ = self.processor.metadata_extractor.extract_title_author_summary(novel_info)
 
         controls = """
 <div id="controls-wrapper">
@@ -218,7 +222,7 @@ class HtmlCreator(ContentProcessor):
         body_parts.append(f"<h1>{self.parser.decode_html_entities(title)}</h1>")
         if author:
             body_parts.append(f"<h2>{self.parser.decode_html_entities(author)}</h2>")
-        if cover_filename and self.download_cover_enabled:
+        if cover_filename and self.processor.chapter_loader.download_cover_enabled:
             body_parts.append(f'<div class="cover"><img src="images/{cover_filename}" alt="Обложка"></div>')
 
         if summary:
@@ -230,16 +234,16 @@ class HtmlCreator(ContentProcessor):
 
         sorted_volumes = sorted(volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0)
 
-        total_volumes = self.get_total_volume_count(novel_info)
+        total_volumes = self.processor.metadata_extractor.get_total_volume_count(novel_info)
 
         for vol_num in sorted_volumes:
-            if self.group_by_volumes and total_volumes > 1:
+            if settings.get("group_by_volumes") and total_volumes > 1:
                 body_parts.append(f'<h2 id="vol-{vol_num}">Том {vol_num}</h2>')
 
             for prep in volume_chapters[vol_num]:
                 ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
 
-                if total_volumes > 1 and not self.group_by_volumes and vol_num != "0":
+                if total_volumes > 1 and not settings.get("group_by_volumes") and vol_num != "0":
                     chapter_title = f'Том {vol_num} Глава {prep["number"]}'
                 else:
                     chapter_title = f'Глава {prep["number"]}'
@@ -273,9 +277,9 @@ class HtmlCreator(ContentProcessor):
 
         sorted_volumes = sorted(volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0)
 
-        total_volumes = self.get_total_volume_count(novel_info)
+        total_volumes = self.processor.metadata_extractor.get_total_volume_count(novel_info)
 
-        has_volumes = self.group_by_volumes and total_volumes > 1
+        has_volumes = settings.get("group_by_volumes") and total_volumes > 1
 
         toc_list_parts = ['<ul class="toc-main-list">']
         for vol_num in sorted_volumes:
@@ -287,7 +291,7 @@ class HtmlCreator(ContentProcessor):
             for prep in volume_chapters[vol_num]:
                 ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
 
-                if total_volumes > 1 and not self.group_by_volumes and vol_num != "0":
+                if total_volumes > 1 and not settings.get("group_by_volumes") and vol_num != "0":
                     chapter_title = f'Том {vol_num} Глава {prep["number"]}'
                 else:
                     chapter_title = f'Глава {prep["number"]}'

@@ -7,10 +7,14 @@ from typing import Any, Dict, List, Optional
 
 from bs4 import BeautifulSoup
 
-from ..processing import ContentProcessor
+from ..settings import settings
 
 
-class TxtCreator(ContentProcessor):
+class TxtCreator:
+    def __init__(self, processor):
+        self.processor = processor
+        self.parser = processor.parser
+
     """Класс для создания TXT-файлов"""
 
     @property
@@ -25,9 +29,9 @@ class TxtCreator(ContentProcessor):
         selected_branch_id: Optional[str] = None,
     ) -> str:
         """Создание TXT файла с главами новеллы."""
-        _, image_folder = self.prepare_dirs(novel_info.get("id"))
+        _, image_folder = self.processor.file_manager.prepare_dirs(novel_info.get("id"))
 
-        prepared_chapters = self.prepare_chapters(
+        prepared_chapters = self.processor.chapter_loader.prepare_chapters(
             novel_info, chapters_data, selected_branch_id, image_folder
         )
 
@@ -35,8 +39,8 @@ class TxtCreator(ContentProcessor):
 
         full_text = self._build_text_content(novel_info, prepared_chapters)
 
-        title, _, _, _ = self.extract_title_author_summary(novel_info)
-        txt_filename = self.get_safe_filename(title, "txt")
+        title, _, _, _ = self.processor.metadata_extractor.extract_title_author_summary(novel_info)
+        txt_filename = self.processor.file_manager.get_safe_filename(title, "txt")
 
         with open(txt_filename, "w", encoding="utf-8") as f:
             f.write(full_text)
@@ -45,7 +49,7 @@ class TxtCreator(ContentProcessor):
 
     def _build_text_content(self, novel_info: Dict[str, Any], prepared_chapters: List[Dict[str, Any]]) -> str:
         """Сборка текстового содержимого книги."""
-        title, author, _, _ = self.extract_title_author_summary(novel_info)
+        title, author, _, _ = self.processor.metadata_extractor.extract_title_author_summary(novel_info)
 
         lines = [title]
         if author:
@@ -58,10 +62,10 @@ class TxtCreator(ContentProcessor):
 
         sorted_volumes = sorted(volume_chapters.keys(), key=lambda x: int(x) if x.isdigit() else 0)
 
-        total_volumes = self.get_total_volume_count(novel_info)
+        total_volumes = self.processor.metadata_extractor.get_total_volume_count(novel_info)
 
         for vol_num in sorted_volumes:
-            if self.group_by_volumes and total_volumes > 1:
+            if settings.get("group_by_volumes") and total_volumes > 1:
                 lines.append(f"Том {vol_num}\n")
                 lines.append("-" * 60 + "\n")
 
@@ -76,7 +80,7 @@ class TxtCreator(ContentProcessor):
         """Форматирование одной главы в текстовый блок."""
         ch_name = self.parser.decode_html_entities(prepared_chapter.get("name", "").strip())
 
-        if total_volumes > 1 and not self.group_by_volumes and volume != "0":
+        if total_volumes > 1 and not settings.get("group_by_volumes") and volume != "0":
             chapter_title = f'Том {volume} Глава {prepared_chapter["number"]}'
         else:
             chapter_title = f'Глава {prepared_chapter["number"]}'
