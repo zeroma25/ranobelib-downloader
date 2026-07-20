@@ -83,6 +83,12 @@ class ContentLoader(QThread):
                 processed_chapter = processor.chapter_loader._process_single_chapter(ch_data, self.novel_info, image_folder)
                 html_content = processed_chapter.get("html", "")
 
+                if html_content:
+                    import re
+                    body_match = re.search(r'<body[^>]*>(.*?)</body>', html_content, re.IGNORECASE | re.DOTALL)
+                    if body_match:
+                        html_content = body_match.group(1).strip()
+
                 if not html_content:
                     raise ValueError("Содержимое главы пустое")
 
@@ -112,6 +118,30 @@ class ContentLoader(QThread):
                         )
                     else:
                         html_content = str(content)
+                        
+                if html_content:
+                    from bs4 import BeautifulSoup, Tag
+                    from ..processing import HtmlProcessor
+                    
+                    html_processor = HtmlProcessor(None, None)
+                    
+                    soup = BeautifulSoup(html_content, "lxml")
+                    for img in soup.find_all("img"):
+                        if isinstance(img, Tag):
+                            img.insert_before(soup.new_tag("br"))
+                            img.insert_after(soup.new_tag("br"))
+                    html_with_images = str(soup)
+                    
+                    html_cleaned = html_processor.cleanup_html_text(html_with_images)
+                    html_content = html_processor.convert_br_to_paragraphs(html_cleaned)
+                    
+                    soup = BeautifulSoup(html_content, "lxml")
+                    html_content = str(soup)
+                    
+                    import re
+                    body_match = re.search(r'<body[^>]*>(.*?)</body>', html_content, re.IGNORECASE | re.DOTALL)
+                    if body_match:
+                        html_content = body_match.group(1).strip()
                 
                 if not html_content:
                     raise ValueError("Содержимое главы пустое")
@@ -216,6 +246,7 @@ class PreviewDialog(QDialog):
         self.content_area = QTextBrowser()
         self.content_area.setReadOnly(True)
         self.content_area.setOpenExternalLinks(False)
+        self.content_area.document().setDocumentMargin(15)
 
         main_layout.addWidget(self.content_area)
 
@@ -231,7 +262,6 @@ class PreviewDialog(QDialog):
             line-height: 1.3;
             color: #e0e0e0;
             background-color: transparent;
-            margin: 20px;
         }}
         
         p {{
@@ -410,6 +440,8 @@ class PreviewDialog(QDialog):
 
         pattern = r'<img[^>]*src=["\']([^"\']+)["\'][^>]*>'
         processed_content = re.sub(pattern, replace_image, content)
+        processed_content = re.sub(r'<p[^>]*>\s*(<div class="image-container">.*?</div>)\s*(</p>)?', r'\1', processed_content, flags=re.IGNORECASE | re.DOTALL)
+        processed_content = re.sub(r'(<div class="image-container">.*?</div>)\s*</p>', r'\1', processed_content, flags=re.IGNORECASE | re.DOTALL)
 
         return processed_content
 
