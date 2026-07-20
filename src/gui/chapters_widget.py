@@ -223,16 +223,6 @@ class ChaptersWidget(QWidget):
         self._apply_tab_order()
         self.chapters_tree.verticalScrollBar().setValue(0)
 
-    def _parse_chapter_number(self, number_str: str) -> tuple:
-        """Преобразование строки номера главы в кортеж чисел для сортировки."""
-        parts = re.split(r"[.\-_]", str(number_str))
-        result = []
-        for part in parts:
-            try:
-                result.append(int(part))
-            except ValueError:
-                result.append(part)
-        return tuple(result)
 
     def _update_chapters_tree(self):
         """Обновление дерева глав с учетом текущих фильтров"""

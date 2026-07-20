@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from bs4 import BeautifulSoup, Tag
 
 from .api import RanobeLibAPI
+from .branches import parse_chapter_number
 from .cache import ChapterCache
 from .img import ImageHandler
 from .parser import RanobeLibParser
@@ -307,16 +308,6 @@ class ChapterLoader:
 
         return prepared
 
-    def _parse_chapter_number(self, number_str: str) -> tuple:
-        """Преобразование строки номера главы в кортеж чисел для сортировки."""
-        parts = re.split(r"[.\-_]", str(number_str))
-        result = []
-        for part in parts:
-            try:
-                result.append(int(part))
-            except ValueError:
-                result.append(part)
-        return tuple(result)
 
     def _filter_chapters(
         self,
@@ -351,7 +342,7 @@ class ChapterLoader:
             ]
 
         filtered.sort(key=lambda x: x["chapter"].get("index", 0))
-        filtered.sort(key=lambda x: self._parse_chapter_number(x["chapter"].get("number", "0")))
+        filtered.sort(key=lambda x: parse_chapter_number(x["chapter"].get("number", "0")))
         return filtered
 
     def _fetch_chapter_html(

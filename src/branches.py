@@ -61,7 +61,7 @@ def get_default_branch_chapters(
 ) -> List[Dict[str, Any]]:
     """Выбирает набор глав по умолчанию, по одному переводу на главу."""
     sorted_chapters_list = sorted(chapters_data, key=lambda x: x.get("index", 0))
-    sorted_chapters_list.sort(key=lambda x: _parse_chapter_number_for_sort(x.get("number", "0")))
+    sorted_chapters_list.sort(key=lambda x: parse_chapter_number(x.get("number", "0")))
 
     chapter_branch_map = defaultdict(dict)
     unique_chapter_keys = []
@@ -113,7 +113,7 @@ def get_default_branch_chapters(
                     selected_chapter_keys.add(key)
 
     final_list.sort(key=lambda x: x["chapter"].get("index", 0))
-    final_list.sort(key=lambda x: _parse_chapter_number_for_sort(x["chapter"].get("number", "0")))
+    final_list.sort(key=lambda x: parse_chapter_number(x["chapter"].get("number", "0")))
 
     return final_list
 
@@ -193,7 +193,7 @@ def _format_branch_name(branch_id: str, branch_info: Dict[str, Any]) -> str:
     return "Неизвестный"
 
 
-def _parse_chapter_number_for_sort(number_str: str) -> tuple:
+def parse_chapter_number(number_str: str) -> tuple:
     """Преобразование строки номера главы в кортеж чисел для сортировки."""
     parts = re.split(r"[.\-_]", str(number_str))
     result = []
