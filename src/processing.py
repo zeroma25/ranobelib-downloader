@@ -2,6 +2,7 @@
 Модуль для обработки и подготовки контента новеллы
 """
 
+import html as html_lib
 import os
 import re
 import threading
@@ -90,12 +91,11 @@ class MetadataExtractor:
         if raw_summary:
             if isinstance(raw_summary, dict):
                 if raw_summary.get("type") == "doc" and raw_summary.get("content"):
-                    raw_summary = self.parser.json_to_html(raw_summary["content"], [])
+                    summary = self.parser.json_to_html(raw_summary["content"], [])
                 else:
-                    raw_summary = str(raw_summary)
-            elif not isinstance(raw_summary, str):
-                raw_summary = str(raw_summary)
-            summary = self.parser.decode_html_entities(raw_summary.strip())
+                    summary = html_lib.escape(str(raw_summary).strip())
+            else:
+                summary = html_lib.escape(str(raw_summary).strip())
 
         genres: List[str] = []
         if novel_info.get("genres"):

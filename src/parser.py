@@ -110,18 +110,31 @@ class RanobeLibParser:
                     None,
                 )
                 if file:
-                    html += f"<img src='{file['url']}'>"
+                    safe_url = html_lib.escape(file['url'], quote=True)
+                    html += f'<img src="{safe_url}">'
         elif attrs:
-            attr_str = " ".join([f'{key}="{value}"' for key, value in attrs.items() if value])
-            html += f"<img {attr_str}>"
+            safe_attrs = []
+            allowed_attrs = {"src", "alt", "width", "height", "title"}
+            for key, value in attrs.items():
+                if key in allowed_attrs and value:
+                    safe_val = html_lib.escape(str(value), quote=True)
+                    safe_attrs.append(f'{key}="{safe_val}"')
+            attr_str = " ".join(safe_attrs)
+            if attr_str:
+                html += f"<img {attr_str}>"
+            else:
+                html += "<img>"
         return html
 
     def _handle_text(self, element: Dict[str, Any], attachments: List[Dict[str, Any]]) -> str:
         """Обработка текста."""
         text_val = element.get("text", "")
+        text_val = self.decode_html_entities(text_val)
+        text_val = html_lib.escape(text_val, quote=True)
         processed_text = re.sub(" +", " ", text_val.replace("\n", "<br>"))
-        return self.decode_html_entities(processed_text)
+        return processed_text
 
     def _handle_default(self, element: Dict[str, Any], attachments: List[Dict[str, Any]]) -> str:
         """Обработка неизвестного типа элемента."""
-        return f"<pre>{json.dumps(element, indent=2)}</pre>" 
+        safe_json = html_lib.escape(json.dumps(element, indent=2))
+        return f"<pre>{safe_json}</pre>" 

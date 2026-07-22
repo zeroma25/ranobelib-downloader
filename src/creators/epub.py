@@ -2,6 +2,7 @@
 Модуль для создания EPUB файлов
 """
 
+import html as html_lib
 import os
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -127,7 +128,7 @@ class EpubCreator:
 
         print("📦 Создание EPUB...")
         for i, prep in enumerate(prepared_chapters):
-            ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
+            ch_name = html_lib.escape(self.parser.decode_html_entities(prep.get("name", "").strip()))
             vol_num = str(prep["volume"])
 
             if total_volumes > 1 and not settings.get("group_by_volumes") and vol_num != "0":
@@ -141,7 +142,7 @@ class EpubCreator:
             chapter = epub.EpubHtml(
                 title=chapter_title, file_name=f"chapter_{i+1}.xhtml", lang="ru"
             )
-            chapter.content = f"<h1>{chapter_title}</h1>{prep['html']}"
+            chapter.content = f"<h1>{html_lib.escape(chapter_title)}</h1>{prep['html']}"
 
             book.add_item(chapter)
             volume_chapters.setdefault(vol_num, []).append(chapter)

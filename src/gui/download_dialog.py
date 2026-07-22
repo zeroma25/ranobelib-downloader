@@ -2,6 +2,7 @@
 Диалог для отображения процесса загрузки глав и создания книг
 """
 
+import html as html_lib
 import os
 import shutil
 import time
@@ -402,7 +403,8 @@ class DownloadDialog(QDialog):
     def _start_download(self):
         """Запуск процесса загрузки"""
         title = self.novel_info.get("rus_name") or self.novel_info.get("eng_name", "Новелла")
-        self.log_text.append(f"<b>Начало загрузки новеллы: {title}</b>")
+        safe_title = html_lib.escape(title)
+        self.log_text.append(f"<b>Начало загрузки новеллы: {safe_title}</b>")
         self.log_text.append(f"Выбрано глав: {len(self.selected_chapters)}")
         formats_str = ", ".join(self.selected_formats) if self.selected_formats else "Нет (только кэш)"
         self.log_text.append(f"Выбранные форматы: {formats_str}")

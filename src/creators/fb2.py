@@ -6,6 +6,7 @@ import base64
 import datetime
 import mimetypes
 import os
+import xml.sax.saxutils as saxutils
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from bs4 import BeautifulSoup, Tag
@@ -107,8 +108,8 @@ class Fb2Creator:
         title, author, annotation, genres = self.processor.metadata_extractor.extract_title_author_summary(novel_info)
         year = self.processor.metadata_extractor.extract_year(novel_info) or str(datetime.datetime.now().year)
 
-        genres_xml = "\n    ".join(f"<genre>{g}</genre>" for g in genres)
-        author_xml = f"<author>\n      <nickname>{author}</nickname>\n    </author>" if author else ""
+        genres_xml = "\n    ".join(f"<genre>{saxutils.escape(g)}</genre>" for g in genres)
+        author_xml = f"<author>\n      <nickname>{saxutils.escape(author)}</nickname>\n    </author>" if author else ""
         cover_xml = (
             f'<coverpage>\n      <image l:href="#{cover_filename}"/>\n    </coverpage>'
             if cover_filename
@@ -117,7 +118,7 @@ class Fb2Creator:
 
         if annotation:
             annotation_lines = [
-                f"      <p>{line.strip()}</p>" for line in annotation.split("\n") if line.strip()
+                f"      <p>{saxutils.escape(line.strip())}</p>" for line in annotation.split("\n") if line.strip()
             ]
             annotation_body = "\n".join(annotation_lines)
             annotation_xml = f"<annotation>\n{annotation_body}\n    </annotation>"
@@ -129,7 +130,7 @@ class Fb2Creator:
   <title-info>
     {genres_xml}
     {author_xml}
-    <book-title>{title}</book-title>
+    <book-title>{saxutils.escape(title)}</book-title>
     {annotation_xml}
     {cover_xml}
     <date value="{year}">{year}</date>
@@ -164,12 +165,12 @@ class Fb2Creator:
                 chapter_title = f'Глава {prep["number"]}'
 
             if ch_name:
-                chapter_title += f" - {ch_name}"
+                chapter_title += f" - {saxutils.escape(ch_name)}"
 
             fb2_fragment, images = self._html_to_fb2(prep["html"])
             all_referenced_images.update(images)
             section_xml = f"""\
-<section id="ch{i}"><title><p>{chapter_title}</p></title>
+<section id="ch{i}"><title><p>{saxutils.escape(chapter_title)}</p></title>
 {fb2_fragment}
 </section>"""
             volume_chapters.setdefault(vol_num, []).append(section_xml)
@@ -205,7 +206,7 @@ class Fb2Creator:
                 continue
             try:
                 mime, data_b64 = self._encode_image(image_path)
-                binaries_parts.append(f'<binary id="{filename}" content-type="{mime}">{data_b64}</binary>')
+                binaries_parts.append(f'<binary id={saxutils.quoteattr(filename)} content-type="{mime}">{data_b64}</binary>')
             except Exception as e:
                 print(f"⚠️ Не удалось добавить изображение {filename} в FB2: {e}")
 

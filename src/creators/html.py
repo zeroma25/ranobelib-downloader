@@ -3,6 +3,7 @@
 """
 
 import base64
+import html as html_lib
 import mimetypes
 import os
 from typing import Any, Dict, List, Optional
@@ -74,7 +75,7 @@ class HtmlCreator:
 
     def _create_html_head(self, title: str, js_script: str) -> str:
         """Создание секции <head> для HTML-документа."""
-        decoded_title = self.parser.decode_html_entities(title)
+        decoded_title = html_lib.escape(self.parser.decode_html_entities(title))
 
         style = """
 <style>
@@ -219,9 +220,9 @@ class HtmlCreator:
         body_parts = [f"<body>{controls}{sidebar}"]
 
         body_parts.append("<main>")
-        body_parts.append(f"<h1>{self.parser.decode_html_entities(title)}</h1>")
+        body_parts.append(f"<h1>{html_lib.escape(self.parser.decode_html_entities(title))}</h1>")
         if author:
-            body_parts.append(f"<h2>{self.parser.decode_html_entities(author)}</h2>")
+            body_parts.append(f"<h2>{html_lib.escape(self.parser.decode_html_entities(author))}</h2>")
         if cover_filename and self.processor.chapter_loader.download_cover_enabled:
             body_parts.append(f'<div class="cover"><img src="images/{cover_filename}" alt="Обложка"></div>')
 
@@ -241,7 +242,7 @@ class HtmlCreator:
                 body_parts.append(f'<h2 id="vol-{vol_num}">Том {vol_num}</h2>')
 
             for prep in volume_chapters[vol_num]:
-                ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
+                ch_name = html_lib.escape(self.parser.decode_html_entities(prep.get("name", "").strip()))
 
                 if total_volumes > 1 and not settings.get("group_by_volumes") and vol_num != "0":
                     chapter_title = f'Том {vol_num} Глава {prep["number"]}'
@@ -289,7 +290,7 @@ class HtmlCreator:
                 )
 
             for prep in volume_chapters[vol_num]:
-                ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
+                ch_name = html_lib.escape(self.parser.decode_html_entities(prep.get("name", "").strip()))
 
                 if total_volumes > 1 and not settings.get("group_by_volumes") and vol_num != "0":
                     chapter_title = f'Том {vol_num} Глава {prep["number"]}'

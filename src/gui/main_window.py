@@ -3,6 +3,7 @@
 """
 
 import base64
+import html as html_lib
 import re
 from typing import Any, Dict, List, Optional
 
@@ -322,7 +323,7 @@ class MainWindow(QMainWindow):
         details_html = ""
 
         if self.novel_info.get("authors"):
-            author_name = self.novel_info["authors"][0].get("name", "Неизвестен")
+            author_name = html_lib.escape(self.novel_info["authors"][0].get("name", "Неизвестен"))
             details_html += f"<p><b>Автор:</b> {author_name}</p>"
 
         status_id = self.novel_info.get("status_id")
@@ -333,7 +334,7 @@ class MainWindow(QMainWindow):
         novel_genres_list = self.novel_info.get("genres")
         if novel_genres_list:
             genre_names = sorted(
-                [g.get("name", "") for g in novel_genres_list if g and g.get("name")]
+                [html_lib.escape(g.get("name", "")) for g in novel_genres_list if g and g.get("name")]
             )
             if genre_names:
                 details_html += f"<p><b>Жанры:</b> {', '.join(genre_names)}</p>"
@@ -341,25 +342,26 @@ class MainWindow(QMainWindow):
         novel_tags_list = self.novel_info.get("tags")
         if novel_tags_list:
             tag_names = sorted(
-                [t.get("name", "") for t in novel_tags_list if t and t.get("name")]
+                [html_lib.escape(t.get("name", "")) for t in novel_tags_list if t and t.get("name")]
             )
             if tag_names:
                 tags_text = ", ".join([f"#{name}" for name in tag_names])
                 details_html += f"<p><b>Теги:</b> {tags_text}</p>"
 
+        summary_html = ""
         raw_summary = self.novel_info.get("summary", "Описание отсутствует.")
         if isinstance(raw_summary, dict):
             if raw_summary.get("type") == "doc" and raw_summary.get("content"):
-                raw_summary = self.parser.json_to_html(raw_summary["content"], [])
+                summary_html = self.parser.json_to_html(raw_summary["content"], [])
             else:
-                raw_summary = str(raw_summary)
-        elif not isinstance(raw_summary, str):
-            raw_summary = str(raw_summary)
+                summary_html = html_lib.escape(str(raw_summary))
+        else:
+            summary_html = html_lib.escape(str(raw_summary))
 
-        decoded_summary = self.parser.decode_html_entities(raw_summary).strip()
-        decoded_summary = re.sub(r'^(?:<br\s*/?>\s*)+', '', decoded_summary, flags=re.IGNORECASE)
+        summary_html = summary_html.strip()
+        summary_html = re.sub(r'^(?:<br\s*/?>\s*)+', '', summary_html, flags=re.IGNORECASE)
         
-        summary = decoded_summary.replace("\n", "<br>")
+        summary = summary_html.replace("\n", "<br>")
         summary = summary.replace("<p>", '<p style="margin-top: 0px; margin-bottom: 5px;">')
         details_html += f'<div style="margin-top: 10px;"><b>Описание:</b><div style="margin-top: 4px;">{summary}</div></div>'
 
@@ -396,6 +398,7 @@ class MainWindow(QMainWindow):
             tooltip_html = f'<div style="width: 400px;">{details_html}</div>'
 
         if self.novel_title_label:
+            self.novel_title_label.setTextFormat(Qt.TextFormat.PlainText)
             self.novel_title_label.setText(title)
             self.novel_title_label.setStyleSheet("")
         if self.info_icon_label:
