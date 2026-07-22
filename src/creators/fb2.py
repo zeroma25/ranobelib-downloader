@@ -117,8 +117,9 @@ class Fb2Creator:
         )
 
         if annotation:
+            plain_annotation = BeautifulSoup(annotation, "lxml").get_text(separator="\n")
             annotation_lines = [
-                f"      <p>{saxutils.escape(line.strip())}</p>" for line in annotation.split("\n") if line.strip()
+                f"      <p>{saxutils.escape(line.strip())}</p>" for line in plain_annotation.split("\n") if line.strip()
             ]
             annotation_body = "\n".join(annotation_lines)
             annotation_xml = f"<annotation>\n{annotation_body}\n    </annotation>"

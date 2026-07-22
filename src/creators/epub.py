@@ -7,6 +7,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from bs4 import BeautifulSoup
 from ebooklib import epub
 
 from ..settings import settings
@@ -68,7 +69,8 @@ class EpubCreator:
         if author:
             book.add_author(author)
         if summary:
-            book.add_metadata("DC", "description", summary)
+            plain_summary = BeautifulSoup(summary, "lxml").get_text(separator="\n")
+            book.add_metadata("DC", "description", plain_summary)
         if genres:
             book.add_metadata("DC", "subject", ", ".join(genres))
         year_str = self.processor.metadata_extractor.extract_year(novel_info)
