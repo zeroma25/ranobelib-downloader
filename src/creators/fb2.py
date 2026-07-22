@@ -157,17 +157,12 @@ class Fb2Creator:
 
         print("📦 Создание FB2...")
         for i, prep in enumerate(prepared_chapters, 1):
-            ch_name = self.parser.decode_html_entities(prep.get("name", "").strip())
+            ch_name_decoded = self.parser.decode_html_entities(prep.get("name", "").strip())
             vol_num = str(prep["volume"])
 
-            if total_volumes > 1 and not settings.get("group_by_volumes") and vol_num != "0":
-                chapter_title = f'Том {vol_num} Глава {prep["number"]}'
-            else:
-                chapter_title = f'Глава {prep["number"]}'
-
-            if ch_name:
-                chapter_title += f" - {saxutils.escape(ch_name)}"
-
+            chapter_title = self.processor.chapter_formatter.format_chapter_title(
+                ch_name_decoded, prep["number"], vol_num, total_volumes
+            )
             fb2_fragment, images = self._html_to_fb2(prep["html"])
             all_referenced_images.update(images)
             section_xml = f"""\

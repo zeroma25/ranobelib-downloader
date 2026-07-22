@@ -79,14 +79,9 @@ class TxtCreator:
     ) -> str:
         """Форматирование одной главы в текстовый блок."""
         ch_name = self.parser.decode_html_entities(prepared_chapter.get("name", "").strip())
-
-        if total_volumes > 1 and not settings.get("group_by_volumes") and volume != "0":
-            chapter_title = f'Том {volume} Глава {prepared_chapter["number"]}'
-        else:
-            chapter_title = f'Глава {prepared_chapter["number"]}'
-
-        if ch_name:
-            chapter_title += f" - {ch_name}"
+        chapter_title = self.processor.chapter_formatter.format_chapter_title(
+            ch_name, prepared_chapter["number"], volume, total_volumes
+        )
 
         html_content = prepared_chapter["html"]
         plain_text = self._html_to_text(html_content)

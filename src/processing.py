@@ -231,6 +231,22 @@ class HtmlProcessor:
         return str(soup)
 
 
+class ChapterFormatter:
+    """Форматирование текстовых блоков и заголовков."""
+
+    def format_chapter_title(self, chapter_name: str, chapter_number: str, volume_number: str, total_volumes: int) -> str:
+        """Форматирует заголовок главы с учетом настроек (group_by_volumes)."""
+        if total_volumes > 1 and not settings.get("group_by_volumes") and volume_number != "0":
+            title = f"Том {volume_number} Глава {chapter_number}"
+        else:
+            title = f"Глава {chapter_number}"
+
+        if chapter_name:
+            title += f" - {chapter_name}"
+            
+        return title
+
+
 class ChapterLoader:
     """Загрузка и подготовка глав."""
     
@@ -493,6 +509,7 @@ class ContentProcessor:
         self.metadata_extractor = MetadataExtractor(parser, api)
         self.html_processor = HtmlProcessor(image_handler, parser)
         self.chapter_loader = ChapterLoader(api, parser, image_handler, self.html_processor)
+        self.chapter_formatter = ChapterFormatter()
         
         self.update_settings()
 

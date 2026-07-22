@@ -242,15 +242,11 @@ class HtmlCreator:
                 body_parts.append(f'<h2 id="vol-{vol_num}">Том {vol_num}</h2>')
 
             for prep in volume_chapters[vol_num]:
-                ch_name = html_lib.escape(self.parser.decode_html_entities(prep.get("name", "").strip()))
-
-                if total_volumes > 1 and not settings.get("group_by_volumes") and vol_num != "0":
-                    chapter_title = f'Том {vol_num} Глава {prep["number"]}'
-                else:
-                    chapter_title = f'Глава {prep["number"]}'
-
-                if ch_name:
-                    chapter_title += f" - {ch_name}"
+                ch_name_decoded = self.parser.decode_html_entities(prep.get("name", "").strip())
+                chapter_title_raw = self.processor.chapter_formatter.format_chapter_title(
+                    ch_name_decoded, prep["number"], vol_num, total_volumes
+                )
+                chapter_title = html_lib.escape(chapter_title_raw)
 
                 chapter_id = f'ch-{prep["volume"]}-{prep["number"]}'
                 body_parts.append(f'<div class="chapter" id="{chapter_id}">')
@@ -290,15 +286,11 @@ class HtmlCreator:
                 )
 
             for prep in volume_chapters[vol_num]:
-                ch_name = html_lib.escape(self.parser.decode_html_entities(prep.get("name", "").strip()))
-
-                if total_volumes > 1 and not settings.get("group_by_volumes") and vol_num != "0":
-                    chapter_title = f'Том {vol_num} Глава {prep["number"]}'
-                else:
-                    chapter_title = f'Глава {prep["number"]}'
-
-                if ch_name:
-                    chapter_title += f" - {ch_name}"
+                ch_name_decoded = self.parser.decode_html_entities(prep.get("name", "").strip())
+                chapter_title_raw = self.processor.chapter_formatter.format_chapter_title(
+                    ch_name_decoded, prep["number"], vol_num, total_volumes
+                )
+                chapter_title = html_lib.escape(chapter_title_raw)
 
                 chapter_id = f'ch-{prep["volume"]}-{prep["number"]}'
                 toc_list_parts.append(f'<li><a href="#{chapter_id}">{chapter_title}</a></li>')

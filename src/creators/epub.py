@@ -130,16 +130,12 @@ class EpubCreator:
 
         print("📦 Создание EPUB...")
         for i, prep in enumerate(prepared_chapters):
-            ch_name = html_lib.escape(self.parser.decode_html_entities(prep.get("name", "").strip()))
             vol_num = str(prep["volume"])
-
-            if total_volumes > 1 and not settings.get("group_by_volumes") and vol_num != "0":
-                chapter_title = f'Том {vol_num} Глава {prep["number"]}'
-            else:
-                chapter_title = f'Глава {prep["number"]}'
-
-            if ch_name:
-                chapter_title += f" - {ch_name}"
+            ch_name_decoded = self.parser.decode_html_entities(prep.get("name", "").strip())
+            chapter_title_raw = self.processor.chapter_formatter.format_chapter_title(
+                ch_name_decoded, prep["number"], vol_num, total_volumes
+            )
+            chapter_title = html_lib.escape(chapter_title_raw)
 
             chapter = epub.EpubHtml(
                 title=chapter_title, file_name=f"chapter_{i+1}.xhtml", lang="ru"
