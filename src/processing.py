@@ -185,28 +185,34 @@ class HtmlProcessor:
         return str(soup)
 
     def convert_br_to_paragraphs(self, html: str) -> str:
-        """Замена разрывов строк <br> на абзацы <p>...</p>."""
+        """Замена разрывов строк <br> вне абзацев на абзацы <p>...</p>."""
         if not html:
             return ""
 
-        normalized = re.sub(r"(?i)<br\s*/?>", "<br>", html)
-        parts = re.split(r"(?:<br>\s*)+", normalized)
+        soup = BeautifulSoup(html, "lxml")
+        output_parts = []
+        current_p_content = []
 
-        output_parts: List[str] = []
-        for part in parts:
-            text = part.strip()
-            if not text:
-                continue
+        def flush_p_content():
+            inner = "".join(current_p_content).strip()
+            if inner:
+                output_parts.append(f"<p>{inner}</p>")
+            current_p_content.clear()
 
-            text = re.sub(r"(?i)^<p[^>]*>", "", text)
-            text = re.sub(r"(?i)</p>$", "", text)
-            text = text.strip()
+        container = soup.body if soup.body else soup
+        for child in container.contents:
+            if isinstance(child, Tag):
+                if child.name == "br":
+                    flush_p_content()
+                elif child.name in ["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "figure", "table", "ul", "ol", "blockquote"]:
+                    flush_p_content()
+                    output_parts.append(str(child))
+                else:
+                    current_p_content.append(str(child))
+            else:
+                current_p_content.append(str(child))
 
-            if not text:
-                continue
-
-            output_parts.append(f"<p>{text}</p>")
-
+        flush_p_content()
         return "".join(output_parts)
 
     def cleanup_html_text(self, html: str) -> str:

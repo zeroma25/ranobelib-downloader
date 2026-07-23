@@ -6,6 +6,7 @@ import base64
 import datetime
 import mimetypes
 import os
+import re
 import xml.sax.saxutils as saxutils
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -64,6 +65,10 @@ class Fb2Creator:
 
     def _html_to_fb2(self, html: str) -> Tuple[str, Set[str]]:
         """Базовое преобразование HTML-контента в FB2-разметку."""
+        html = re.sub(r"(?i)<p>\s*<br\s*/?>\s*</p>", "<empty-line/>", html)
+        html = re.sub(r"(?i)<br\s*/?>", "</p><p>", html)
+        html = re.sub(r"(?i)<p>\s*</p>", "", html)
+
         soup = BeautifulSoup(html, "lxml")
         referenced_images: Set[str] = set()
 
@@ -89,6 +94,8 @@ class Fb2Creator:
 
             if isinstance(element, Tag) and element.name == "image":
                 output_parts.append(str(element))
+            elif isinstance(element, Tag) and element.name == "empty-line":
+                output_parts.append("<empty-line/>")
             elif text.lower().startswith("<p"):
                 output_parts.append(text)
             else:
