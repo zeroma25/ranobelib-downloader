@@ -2,7 +2,6 @@
 Диалог для предпросмотра содержимого главы
 """
 
-import base64
 from typing import Any, Dict
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -175,6 +174,7 @@ class PreviewDialog(QDialog):
         self.image_handler = image_handler
         self.content_loader = None
         self.original_content = ""
+        self._temp_files_to_delete = []
 
         self.font_size = 12
         self.min_font_size = 8
@@ -380,7 +380,7 @@ class PreviewDialog(QDialog):
         )
 
     def _process_images_in_content(self, content: str) -> str:
-        """Обрабатывает изображения в содержимом, заменяя их на base64"""
+        """Обрабатывает изображения в содержимом, сохраняя их во временную папку"""
         import re
 
         def replace_image(match):
@@ -391,6 +391,9 @@ class PreviewDialog(QDialog):
                     return f'<div class="image-container"><img src="{img_url}" alt="Изображение"></div>'
                     
                 from ..settings import USER_DATA_DIR
+                from PyQt6.QtCore import QUrl
+                import hashlib
+                
                 novel_id = str(self.novel_info.get("id"))
                 
                 check_paths = [
@@ -406,17 +409,8 @@ class PreviewDialog(QDialog):
                         break
                         
                 if local_path:
-                    with open(local_path, "rb") as img_file:
-                        img_base64 = base64.b64encode(img_file.read()).decode("ascii")
-                    content_type = "image/jpeg"
-                    if local_path.lower().endswith(".png"):
-                        content_type = "image/png"
-                    elif local_path.lower().endswith(".gif"):
-                        content_type = "image/gif"
-                    elif local_path.lower().endswith(".webp"):
-                        content_type = "image/webp"
-                    data_url = f"data:{content_type};base64,{img_base64}"
-                    return f'<div class="image-container"><img src="{data_url}" alt="Изображение"></div>'
+                    res_url = QUrl.fromLocalFile(os.path.abspath(local_path)).toString()
+                    return f'<div class="image-container"><img src="{res_url}" alt="Изображение"></div>'
 
                 if img_url.startswith('/'):
                     img_url = f"https://ranobelib.me{img_url}"
@@ -426,14 +420,39 @@ class PreviewDialog(QDialog):
                 response = self.api.session.get(img_url, timeout=10)
                 response.raise_for_status()
 
-                content_type = response.headers.get("content-type", "image/jpeg")
-                if not content_type.startswith("image/"):
-                    content_type = "image/jpeg"
+                content_type = response.headers.get("content-type", "").lower()
+                ext = ".jpg"
+                if "image/png" in content_type:
+                    ext = ".png"
+                elif "image/gif" in content_type:
+                    ext = ".gif"
+                elif "image/webp" in content_type:
+                    ext = ".webp"
+                elif "image/svg" in content_type:
+                    ext = ".svg"
+                else:
+                    lower_url = img_url.lower()
+                    if lower_url.endswith(".png") or ".png?" in lower_url:
+                        ext = ".png"
+                    elif lower_url.endswith(".gif") or ".gif?" in lower_url:
+                        ext = ".gif"
+                    elif lower_url.endswith(".webp") or ".webp?" in lower_url:
+                        ext = ".webp"
 
-                img_base64 = base64.b64encode(response.content).decode("ascii")
-                data_url = f"data:{content_type};base64,{img_base64}"
+                import uuid
+                temp_filename = f"img_{uuid.uuid4().hex}{ext}"
+                temp_dir = os.path.join(USER_DATA_DIR, "cache", f"preview_images_{novel_id}")
+                os.makedirs(temp_dir, exist_ok=True)
+                
+                temp_path = os.path.join(temp_dir, temp_filename)
+                with open(temp_path, "wb") as f:
+                    f.write(response.content)
 
-                return f'<div class="image-container"><img src="{data_url}" alt="Изображение"></div>'
+                if hasattr(self, '_temp_files_to_delete'):
+                    self._temp_files_to_delete.append(temp_path)
+
+                res_url = QUrl.fromLocalFile(os.path.abspath(temp_path)).toString()
+                return f'<div class="image-container"><img src="{res_url}" alt="Изображение"></div>'
 
             except Exception as e:
                 print(f"Ошибка загрузки изображения {img_url}: {e}")
@@ -487,4 +506,24 @@ class PreviewDialog(QDialog):
         if self.content_loader and self.content_loader.isRunning():
             self.content_loader.terminate()
             self.content_loader.wait(3000)
+            
+        if hasattr(self, '_temp_files_to_delete'):
+            import os
+            for file_path in self._temp_files_to_delete:
+                try:
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                except Exception as e:
+                    print(f"Ошибка удаления временного файла {file_path}: {e}")
+            self._temp_files_to_delete.clear()
+            
+            novel_id = str(self.novel_info.get("id"))
+            from ..settings import USER_DATA_DIR
+            temp_dir = os.path.join(USER_DATA_DIR, "cache", f"preview_images_{novel_id}")
+            try:
+                if os.path.exists(temp_dir) and not os.listdir(temp_dir):
+                    os.rmdir(temp_dir)
+            except Exception:
+                pass
+                
         super().closeEvent(event) 
