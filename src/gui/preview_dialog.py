@@ -364,6 +364,7 @@ class PreviewDialog(QDialog):
             styled_content = self._setup_content_styles() + self.original_content
             self.content_area.clear()
             self.content_area.setHtml(styled_content)
+            self.content_area.verticalScrollBar().setValue(0)     
             self.content_area.update()
             self.content_area.repaint()
 
