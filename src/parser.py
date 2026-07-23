@@ -43,6 +43,16 @@ class RanobeLibParser:
             "text": self._handle_text,
         }
 
+        self._mark_tags: List[tuple] = [
+            ("bold", "b"),
+            ("italic", "i"),
+            ("underline", "u"),
+            ("strike", "s"),
+            ("code", "code"),
+            ("subscript", "sub"),
+            ("superscript", "sup"),
+        ]
+
     def json_to_html(
         self, json_content: List[Dict[str, Any]], attachments: List[Dict[str, Any]]
     ) -> str:
@@ -95,7 +105,7 @@ class RanobeLibParser:
         return "<hr>"
 
     def _handle_image(self, element: Dict[str, Any], attachments: List[Dict[str, Any]]) -> str:
-        """Обработка тега <img>."""
+        """Обработка тега <img> (+ подпись/примечание)."""
         html = ""
         attrs = element.get("attrs", {})
         if attrs.get("images"):
@@ -124,14 +134,41 @@ class RanobeLibParser:
                 html += f"<img {attr_str}>"
             else:
                 html += "<img>"
+
+        description = attrs.get("description")
+        if html and isinstance(description, str) and description.strip():
+            caption = self.decode_html_entities(description)
+            caption = html_lib.escape(caption, quote=True)
+            caption = re.sub(" +", " ", caption.replace("\n", "<br>"))
+            html = f"<figure>{html}<figcaption>{caption}</figcaption></figure>"
+
         return html
 
     def _handle_text(self, element: Dict[str, Any], attachments: List[Dict[str, Any]]) -> str:
-        """Обработка текста."""
+        """Обработка текста с учётом инлайн-форматирования."""
         text_val = element.get("text", "")
         text_val = self.decode_html_entities(text_val)
         text_val = html_lib.escape(text_val, quote=True)
         processed_text = re.sub(" +", " ", text_val.replace("\n", "<br>"))
+
+        marks = element.get("marks")
+        if not marks or not isinstance(marks, list):
+            return processed_text
+
+        mark_types = {
+            m.get("type"): m for m in marks if isinstance(m, dict) and m.get("type")
+        }
+
+        for mark_type, tag in self._mark_tags:
+            if mark_type in mark_types:
+                processed_text = f"<{tag}>{processed_text}</{tag}>"
+
+        link_mark = mark_types.get("link")
+        if link_mark:
+            href = (link_mark.get("attrs") or {}).get("href", "")
+            safe_href = html_lib.escape(str(href), quote=True)
+            processed_text = f'<a href="{safe_href}">{processed_text}</a>'
+
         return processed_text
 
     def _handle_default(self, element: Dict[str, Any], attachments: List[Dict[str, Any]]) -> str:

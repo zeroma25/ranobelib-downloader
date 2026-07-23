@@ -97,6 +97,9 @@ class TxtCreator:
         for img in soup.find_all("img"):
             img.decompose()
 
+        for figure in soup.find_all("figure"):
+            figure.decompose()
+
         text = soup.get_text(separator="\n")
 
         lines = [line.strip() for line in text.splitlines()]
