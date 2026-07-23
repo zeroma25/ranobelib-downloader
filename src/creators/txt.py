@@ -100,7 +100,14 @@ class TxtCreator:
         for figure in soup.find_all("figure"):
             figure.decompose()
 
-        text = soup.get_text(separator="\n")
+        for br in soup.find_all("br"):
+            br.replace_with("\n")
+            
+        for block in soup.find_all(["p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li"]):
+            block.insert_before("\n")
+            block.insert_after("\n")
+
+        text = soup.get_text()
 
         lines = [line.strip() for line in text.splitlines()]
         non_empty_lines = [line for line in lines if line]
