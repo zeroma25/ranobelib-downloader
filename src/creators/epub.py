@@ -138,9 +138,9 @@ class EpubCreator:
             chapter_title = html_lib.escape(chapter_title_raw)
 
             chapter = epub.EpubHtml(
-                title=chapter_title, file_name=f"chapter_{i+1}.xhtml", lang="ru"
+                title=chapter_title_raw, file_name=f"chapter_{i+1}.xhtml", lang="ru"
             )
-            chapter.content = f"<h1>{html_lib.escape(chapter_title)}</h1>{prep['html']}"
+            chapter.content = f"<h1>{chapter_title}</h1>{prep['html']}"
 
             book.add_item(chapter)
             volume_chapters.setdefault(vol_num, []).append(chapter)
