@@ -194,12 +194,12 @@ def _format_branch_name(branch_id: str, branch_info: Dict[str, Any]) -> str:
 
 
 def parse_chapter_number(number_str: str) -> tuple:
-    """Преобразование строки номера главы в кортеж чисел для сортировки."""
+    """Преобразование строки номера главы в кортеж для натуральной сортировки."""
     parts = re.split(r"[.\-_]", str(number_str))
     result = []
     for part in parts:
         try:
-            result.append(int(part))
+            result.append((0, int(part)))
         except ValueError:
-            result.append(part)
-    return tuple(result) 
+            result.append((1, part))
+    return tuple(result)
