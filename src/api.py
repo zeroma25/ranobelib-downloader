@@ -9,11 +9,26 @@ from typing import Any, Callable, Deque, Dict, List, Optional
 from urllib.parse import urlparse
 
 import requests
+from requests.auth import AuthBase
 
 DEFAULT_REQUESTS_LIMIT = 90
 REQUESTS_PERIOD = 60
 REQUEST_TIMEOUT = 10
 RETRY_DELAYS = [3, 3, 30, 30, 30]
+
+
+class DomainRestrictedAuth(AuthBase):
+    """Авторизация, отправляющая токен только на доверенные домены."""
+
+    def __init__(self, token: str):
+        self.token = token
+
+    def __call__(self, r):
+        netloc = urlparse(r.url).netloc
+        if (netloc == "ranobelib.me" or netloc.endswith(".ranobelib.me") or
+            netloc == "cdnlibs.org" or netloc.endswith(".cdnlibs.org")):
+            r.headers["Authorization"] = f"Bearer {self.token}"
+        return r
 
 
 class OperationCancelledError(Exception):
@@ -53,10 +68,13 @@ class RanobeLibAPI:
         """Установка токена для авторизованных запросов."""
         token = token.strip()
         if token:
-            self.session.headers["Authorization"] = f"Bearer {token}"
+            self.session.auth = DomainRestrictedAuth(token)
+            if "Authorization" in self.session.headers:
+                del self.session.headers["Authorization"]
 
     def clear_token(self) -> None:
         """Очистка токена из заголовков сессии."""
+        self.session.auth = None
         if "Authorization" in self.session.headers:
             del self.session.headers["Authorization"]
 
