@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from bs4 import BeautifulSoup, Tag
 
 from .api import RanobeLibAPI
-from .branches import parse_chapter_number
+from .branches import extract_branch_id, parse_chapter_number
 from .cache import ChapterCache
 from .img import ImageHandler
 from .parser import RanobeLibParser
@@ -347,12 +347,7 @@ class ChapterLoader:
             filtered = []
             for chapter in chapters_data:
                 for branch in chapter.get("branches", []):
-                    branch_id_str = "0"
-                    if isinstance(branch, dict):
-                        branch_id_val = branch.get("branch_id")
-                        branch_id_str = str(branch_id_val if branch_id_val is not None else "0")
-                    elif branch is not None:
-                        branch_id_str = str(branch)
+                    branch_id_str = extract_branch_id(branch)
 
                     if branch_id_str == selected_branch_id:
                         filtered.append({"chapter": chapter, "branch": branch})
@@ -415,12 +410,7 @@ class ChapterLoader:
 
         volume = str(ch_info.get("volume", "0"))
         number = str(ch_info.get("number", "0"))
-        branch_id = "0"
-        if isinstance(branch, dict):
-            branch_id_val = branch.get("branch_id")
-            branch_id = str(branch_id_val if branch_id_val is not None else "0")
-        elif branch is not None:
-            branch_id = str(branch)
+        branch_id = extract_branch_id(branch)
 
         novel_id = str(novel_info.get("id"))
         

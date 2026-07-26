@@ -6,6 +6,16 @@ from collections import defaultdict
 from typing import Any, Dict, List, Set
 
 
+def extract_branch_id(branch: Any) -> str:
+    """Извлекает ID ветки из объекта ветки."""
+    if isinstance(branch, dict):
+        branch_id_val = branch.get("branch_id")
+        return str(branch_id_val if branch_id_val is not None else "0")
+    if branch is not None:
+        return str(branch)
+    return "0"
+
+
 def get_formatted_branches_with_teams(
     novel_info: Dict[str, Any], chapters_data: List[Dict[str, Any]]
 ) -> Dict[str, Dict[str, Any]]:
@@ -74,12 +84,7 @@ def get_default_branch_chapters(
             seen_keys.add(key)
 
         for branch in chapter.get("branches", []):
-            branch_id_str = "0"
-            if isinstance(branch, dict):
-                branch_id_val = branch.get("branch_id")
-                branch_id_str = str(branch_id_val if branch_id_val is not None else "0")
-            elif branch is not None:
-                branch_id_str = str(branch)
+            branch_id_str = extract_branch_id(branch)
 
             if branch_id_str not in chapter_branch_map[key]:
                 chapter_branch_map[key][branch_id_str] = {
@@ -148,12 +153,7 @@ def _get_chapter_counts_by_branch(chapters_data: List[Dict[str, Any]]) -> Dict[s
     counts = defaultdict(int)
     for chapter in chapters_data:
         for branch in chapter.get("branches", []):
-            branch_id = "0"
-            if isinstance(branch, dict):
-                branch_id_raw = branch.get("branch_id")
-                branch_id = str(branch_id_raw if branch_id_raw is not None else "0")
-            elif branch is not None:
-                branch_id = str(branch)
+            branch_id = extract_branch_id(branch)
             counts[branch_id] += 1
     return counts
 
@@ -166,8 +166,7 @@ def _get_teams_by_branch(chapters_data: List[Dict[str, Any]]) -> Dict[str, Set[s
             if not isinstance(branch, dict):
                 continue
 
-            branch_id_raw = branch.get("branch_id")
-            branch_id = str(branch_id_raw if branch_id_raw is not None else "0")
+            branch_id = extract_branch_id(branch)
             teams_list = branch.get("teams", []) or []
             if teams_list:
                 for team in teams_list:

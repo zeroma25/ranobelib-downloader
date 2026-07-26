@@ -10,7 +10,7 @@ from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSplitter, QVBoxLayout, QWidget
 
-from ..branches import get_formatted_branches_with_teams
+from ..branches import extract_branch_id, get_formatted_branches_with_teams
 from .chapter_tree import ChapterTree
 from .filter_widget import TranslationFilterWidget
 from .settings_widget import SettingsWidget
@@ -185,8 +185,7 @@ class ChaptersWidget(QWidget):
                 if not isinstance(branch, dict):
                     continue
 
-                branch_id_raw = branch.get("branch_id")
-                branch_id = str(branch_id_raw if branch_id_raw is not None else "0")
+                branch_id = extract_branch_id(branch)
                 teams_list = branch.get("teams", []) or []
                 team_names = [team.get("name", "Неизвестный") for team in teams_list]
                 if not team_names:
@@ -241,20 +240,17 @@ class ChaptersWidget(QWidget):
 
             available_translations = []
             for branch in chapter.get("branches", []):
-                branch_id = "0"
+                branch_id = extract_branch_id(branch)
                 teams = []
                 current_group_tuple = tuple()
 
                 if isinstance(branch, dict):
-                    branch_id_raw = branch.get("branch_id")
-                    branch_id = str(branch_id_raw if branch_id_raw is not None else "0")
                     teams_list = branch.get("teams", []) or []
                     teams = [team.get("name", "Неизвестный") for team in teams_list]
                     if not teams:
                         teams = ["Неизвестный"]
                     current_group_tuple = tuple(sorted(teams))
                 elif branch is not None:
-                    branch_id = str(branch)
                     teams = ["Неизвестный"]
                     current_group_tuple = ("Неизвестный",)
 
