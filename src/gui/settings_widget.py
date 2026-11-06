@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -125,6 +126,21 @@ class SettingsWidget(QWidget):
         )
         settings_layout.addWidget(self.option_checkboxes["group_by_volumes"])
 
+        parallel_layout = QHBoxLayout()
+        parallel_layout.setContentsMargins(0, 0, 0, 0)
+        self.parallel_label = QLabel("Потоков при скачивании:")
+        parallel_layout.addWidget(self.parallel_label)
+
+        self.parallel_spinbox = QSpinBox()
+        self.parallel_spinbox.setRange(1, 16)
+        self.parallel_spinbox.setValue(4)
+        self.parallel_spinbox.setToolTip(
+            "Количество глав, скачиваемых параллельно (1 — последовательное скачивание)"
+        )
+        parallel_layout.addWidget(self.parallel_spinbox)
+        parallel_layout.addStretch()
+        settings_layout.addLayout(parallel_layout)
+
         settings_layout.setSpacing(3)
         formats_label = QLabel("Формат книги:")
         formats_label.setStyleSheet("margin-top: 5px;")
@@ -192,6 +208,8 @@ class SettingsWidget(QWidget):
         for key, checkbox in self.option_checkboxes.items():
             checkbox.setChecked(settings.get(key))
 
+        self.parallel_spinbox.setValue(int(settings.get("max_parallel_downloads", 4) or 4))
+
         self.path_edit.setText(settings.get("save_directory"))
 
         selected_formats = settings.get("selected_formats", ["EPUB"])
@@ -207,6 +225,9 @@ class SettingsWidget(QWidget):
             checkbox.stateChanged.connect(self._save_formats)
 
         self.path_edit.textChanged.connect(lambda text: self._save_option("save_directory", text))
+        self.parallel_spinbox.valueChanged.connect(
+            lambda value: self._save_option("max_parallel_downloads", int(value))
+        )
 
     def _save_option(self, key: str, value: Any):
         """Сохранение отдельной настройки"""
@@ -334,5 +355,6 @@ class SettingsWidget(QWidget):
 
         chain.append(self.path_edit)
         chain.append(self.browse_button)
+        chain.append(self.parallel_spinbox)
         chain.append(self.download_button)
         return chain 

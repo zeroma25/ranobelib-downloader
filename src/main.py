@@ -192,6 +192,7 @@ def _show_settings():
     print("⚙️ Текущие настройки:")
     for key, display_name, _, default_val in _BOOL_SETTINGS:
         print(f"  • {display_name}: {'✅' if settings.get(key, default_val) else '❌'}")
+    print(f"  • Потоков при скачивании: {settings.get('max_parallel_downloads', 4)}")
     print(f"  • Каталог для сохранения: {settings.get('save_directory')}")
 
 
@@ -222,6 +223,19 @@ def _change_settings():
                     print(f"❌ Не удалось очистить кэш: {e}")
 
     current_dir = settings.get("save_directory")
+
+    current_workers = settings.get("max_parallel_downloads", 4)
+    workers_choice = input(f"  Потоков при скачивании (1-16) [{current_workers}]: ").strip()
+    if workers_choice:
+        try:
+            workers_val = int(workers_choice)
+            if 1 <= workers_val <= 16:
+                settings.set("max_parallel_downloads", workers_val)
+            else:
+                print("  ⚠️ Значение должно быть в диапазоне 1-16, оставлено прежнее")
+        except ValueError:
+            print("  ⚠️ Нужно целое число, оставлено прежнее")
+
     new_dir = input(f"  Каталог для сохранения [{current_dir}]: ").strip()
     if new_dir:
         if not os.path.exists(new_dir):

@@ -1,0 +1,13 @@
+{
+  "cache_chapters": false,
+  "download_cover": false,
+  "download_images": false,
+  "compress_images": false,
+  "add_translator": false,
+  "group_by_volumes": false,
+  "max_parallel_downloads": 4,
+  "save_directory": "n",
+  "selected_formats": [
+    "EPUB"
+  ]
+}

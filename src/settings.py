@@ -28,6 +28,7 @@ class Settings:
             "compress_images": True,
             "add_translator": False,
             "group_by_volumes": True,
+            "max_parallel_downloads": 4,
             "save_directory": "downloads",
             "selected_formats": ["EPUB"],
         }
