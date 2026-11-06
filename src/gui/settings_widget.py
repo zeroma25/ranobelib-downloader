@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -125,6 +126,21 @@ class SettingsWidget(QWidget):
         )
         settings_layout.addWidget(self.option_checkboxes["group_by_volumes"])
 
+        parallel_layout = QHBoxLayout()
+        parallel_layout.setContentsMargins(0, 0, 0, 0)
+        self.parallel_label = QLabel("Потоков при скачивании:")
+        parallel_layout.addWidget(self.parallel_label)
+
+        self.parallel_spinbox = QSpinBox()
+        self.parallel_spinbox.setRange(1, 16)
+        self.parallel_spinbox.setValue(4)
+        self.parallel_spinbox.setToolTip(
+            "Количество глав, скачиваемых параллельно (1 — последовательное скачивание)"
+        )
+        parallel_layout.addWidget(self.parallel_spinbox)
+        parallel_layout.addStretch()
+        settings_layout.addLayout(parallel_layout)
+
         settings_layout.setSpacing(3)
         formats_label = QLabel("Формат книги:")
         formats_label.setStyleSheet("margin-top: 5px;")
@@ -191,6 +207,8 @@ class SettingsWidget(QWidget):
         """Загрузка настроек из модуля settings"""
         for key, checkbox in self.option_checkboxes.items():
             checkbox.setChecked(settings.get(key))
+
+        self.parallel_spinbox.setValue(int(settings.get("max_parallel_downloads", 4) or 4))
 
         self.path_edit.setText(settings.get("save_directory"))
 

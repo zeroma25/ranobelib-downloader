@@ -53,6 +53,8 @@ class RanobeLibAPI:
         self.rate_limit = DEFAULT_REQUESTS_LIMIT
         self.rate_remaining = DEFAULT_REQUESTS_LIMIT
         self.window_start_time = time.monotonic()
+        # Лок для синхронизации проверки/ожидания лимита между потоками
+        self._rate_lock = threading.Lock()
         self.token_refresh_callback: Optional[Callable[[], bool]] = None
         self.cancellation_event = threading.Event()
 
@@ -187,20 +189,30 @@ class RanobeLibAPI:
         return data.get("data", {})
 
     def wait_for_rate_limit(self) -> None:
-        """Динамическая задержка на основе реальных заголовков сервера."""
-        if self.rate_remaining <= 2:
-            elapsed = time.monotonic() - self.window_start_time
-            wait_time = REQUESTS_PERIOD - elapsed
-            if wait_time > 0:
-                self._interruptible_sleep(wait_time)
-            self.window_start_time = time.monotonic()
-            
-        elif self.rate_remaining <= 10:
-            elapsed = time.monotonic() - self.window_start_time
-            remaining_time = REQUESTS_PERIOD - elapsed
-            if remaining_time > 0:
-                delay = remaining_time / self.rate_remaining
-                self._interruptible_sleep(delay)
+        """Динамическая задержка на основе реальных заголовков сервера (потокобезопасно)."""
+        # Расчет задержки выполняется под локом, чтобы несколько потоков
+        # не пропускали запросы одновременно в обход лимита
+        with self._rate_lock:
+            if self.rate_remaining <= 2:
+                elapsed = time.monotonic() - self.window_start_time
+                wait_time = REQUESTS_PERIOD - elapsed
+                delay = max(wait_time, 0.0)
+                reset_window = wait_time > 0
+            elif self.rate_remaining <= 10:
+                elapsed = time.monotonic() - self.window_start_time
+                remaining_time = REQUESTS_PERIOD - elapsed
+                delay = remaining_time / self.rate_remaining if remaining_time > 0 else 0.0
+                reset_window = False
+            else:
+                return
+
+        # Ожидание выполняется вне лока, чтобы другие потоки могли работать параллельно
+        if delay > 0:
+            self._interruptible_sleep(delay)
+
+        if reset_window:
+            with self._rate_lock:
+                self.window_start_time = time.monotonic()
 
     def _interruptible_sleep(self, duration: float):
         """Приостанавливает выполнение на заданное время, но может быть прервано событием отмены."""

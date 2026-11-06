@@ -5,6 +5,7 @@
 import hashlib
 import os
 import secrets
+import threading
 from typing import Optional, Tuple
 
 import requests
@@ -24,54 +25,58 @@ class ImageHandler:
         self.hash_to_filename: dict[str, str] = {}
         self.size_to_filenames: dict[int, list[str]] = {}
         self.populated_folders: set[str] = set()
+        # Лок для потокобезопасной работы при параллельном скачивании глав
+        self._lock = threading.RLock()
 
     def reset(self):
         """Сброс состояния обработчика для новой сессии скачивания."""
-        self.image_counters = {}
-        self.hash_to_filename = {}
-        self.size_to_filenames = {}
-        self.populated_folders = set()
+        with self._lock:
+            self.image_counters = {}
+            self.hash_to_filename = {}
+            self.size_to_filenames = {}
+            self.populated_folders = set()
 
     def populate_hash_cache(self, folder: str):
         """Заполняет кэш хэшей уже существующими файлами из папки для дедупликации между сессиями."""
-        if not hasattr(self, "populated_folders"):
-            self.populated_folders = set()
-        if not hasattr(self, "size_to_filenames"):
-            self.size_to_filenames = {}
-            
-        if folder in self.populated_folders:
-            return
-            
-        self.populated_folders.add(folder)
-        
-        if not os.path.exists(folder):
-            return
-        
-        size_to_files: dict[int, list[str]] = {}
-        for filename in os.listdir(folder):
-            if filename.startswith("temp_") or not os.path.isfile(os.path.join(folder, filename)):
-                continue
-            filepath = os.path.join(folder, filename)
-            try:
-                size = os.path.getsize(filepath)
-                if size not in size_to_files:
-                    size_to_files[size] = []
-                size_to_files[size].append(filename)
-            except OSError:
-                pass
-                
-        for size, filenames in size_to_files.items():
-            if size not in self.size_to_filenames:
-                self.size_to_filenames[size] = []
-            self.size_to_filenames[size].extend(filenames)
+        with self._lock:
+            if not hasattr(self, "populated_folders"):
+                self.populated_folders = set()
+            if not hasattr(self, "size_to_filenames"):
+                self.size_to_filenames = {}
 
-        for size, filenames in size_to_files.items():
-            if len(filenames) > 1:
-                for filename in filenames:
-                    filepath = os.path.join(folder, filename)
-                    file_hash = self._get_file_hash(filepath)
-                    if file_hash and file_hash not in self.hash_to_filename:
-                        self.hash_to_filename[file_hash] = filename
+            if folder in self.populated_folders:
+                return
+
+            self.populated_folders.add(folder)
+
+            if not os.path.exists(folder):
+                return
+
+            size_to_files: dict[int, list[str]] = {}
+            for filename in os.listdir(folder):
+                if filename.startswith("temp_") or not os.path.isfile(os.path.join(folder, filename)):
+                    continue
+                filepath = os.path.join(folder, filename)
+                try:
+                    size = os.path.getsize(filepath)
+                    if size not in size_to_files:
+                        size_to_files[size] = []
+                    size_to_files[size].append(filename)
+                except OSError:
+                    pass
+
+            for size, filenames in size_to_files.items():
+                if size not in self.size_to_filenames:
+                    self.size_to_filenames[size] = []
+                self.size_to_filenames[size].extend(filenames)
+
+            for size, filenames in size_to_files.items():
+                if len(filenames) > 1:
+                    for filename in filenames:
+                        filepath = os.path.join(folder, filename)
+                        file_hash = self._get_file_hash(filepath)
+                        if file_hash and file_hash not in self.hash_to_filename:
+                            self.hash_to_filename[file_hash] = filename
 
     def download_image(
         self,
@@ -106,47 +111,51 @@ class ImageHandler:
             self._compress_image(processed_path, processed_path)
 
         if deduplicate:
-            try:
-                processed_size = os.path.getsize(processed_path)
-            except OSError:
-                processed_size = -1
-                
-            if processed_size > 0 and processed_size in self.size_to_filenames:
-                for existing_filename in self.size_to_filenames[processed_size]:
-                    if existing_filename not in self.hash_to_filename.values():
-                        existing_path = os.path.join(folder, existing_filename)
-                        if os.path.exists(existing_path):
-                            ex_hash = self._get_file_hash(existing_path)
-                            if ex_hash and ex_hash not in self.hash_to_filename:
-                                self.hash_to_filename[ex_hash] = existing_filename
+            with self._lock:
+                try:
+                    processed_size = os.path.getsize(processed_path)
+                except OSError:
+                    processed_size = -1
 
-            file_hash = self._get_file_hash(processed_path)
-            if file_hash and file_hash in self.hash_to_filename:
-                target_filename = self.hash_to_filename[file_hash]
-                target_path = os.path.join(folder, target_filename)
-                if os.path.exists(target_path):
-                    if os.path.exists(processed_path):
-                        os.remove(processed_path)
-                    return target_filename
-                else:
-                    del self.hash_to_filename[file_hash]
+                if processed_size > 0 and processed_size in self.size_to_filenames:
+                    for existing_filename in self.size_to_filenames[processed_size]:
+                        if existing_filename not in self.hash_to_filename.values():
+                            existing_path = os.path.join(folder, existing_filename)
+                            if os.path.exists(existing_path):
+                                ex_hash = self._get_file_hash(existing_path)
+                                if ex_hash and ex_hash not in self.hash_to_filename:
+                                    self.hash_to_filename[ex_hash] = existing_filename
+
+                file_hash = self._get_file_hash(processed_path)
+                if file_hash and file_hash in self.hash_to_filename:
+                    target_filename = self.hash_to_filename[file_hash]
+                    target_path = os.path.join(folder, target_filename)
+                    if os.path.exists(target_path):
+                        if os.path.exists(processed_path):
+                            os.remove(processed_path)
+                        return target_filename
+                    else:
+                        del self.hash_to_filename[file_hash]
 
         if filename:
             _, ext = os.path.splitext(processed_path)
             final_name = f"{filename}{ext}"
         else:
             _, ext = os.path.splitext(processed_path)
-            counter = self.image_counters.get(filename_prefix, 1)
-            while True:
-                exists = any(
-                    os.path.exists(os.path.join(folder, f"{filename_prefix}_{counter}{e}"))
-                    for e in [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]
-                )
-                if not exists:
-                    final_name = f"{filename_prefix}_{counter}{ext}"
-                    break
-                counter += 1
-            self.image_counters[filename_prefix] = counter + 1
+            # Выбор имени файла выполняется под локацией, чтобы избежать
+            # конфликтов при параллельном скачивании из нескольких потоков
+            with self._lock:
+                counter = self.image_counters.get(filename_prefix, 1)
+                while True:
+                    exists = any(
+                        os.path.exists(os.path.join(folder, f"{filename_prefix}_{counter}{e}"))
+                        for e in [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]
+                    )
+                    if not exists:
+                        final_name = f"{filename_prefix}_{counter}{ext}"
+                        break
+                    counter += 1
+                self.image_counters[filename_prefix] = counter + 1
 
         final_path = os.path.join(folder, final_name)
         if os.path.exists(processed_path) and processed_path != final_path:
@@ -162,12 +171,13 @@ class ImageHandler:
                 return None
 
         if deduplicate and "file_hash" in locals() and file_hash:
-            self.hash_to_filename[file_hash] = final_name
-            if "processed_size" in locals() and processed_size > 0:
-                if processed_size not in self.size_to_filenames:
-                    self.size_to_filenames[processed_size] = []
-                if final_name not in self.size_to_filenames[processed_size]:
-                    self.size_to_filenames[processed_size].append(final_name)
+            with self._lock:
+                self.hash_to_filename[file_hash] = final_name
+                if "processed_size" in locals() and processed_size > 0:
+                    if processed_size not in self.size_to_filenames:
+                        self.size_to_filenames[processed_size] = []
+                    if final_name not in self.size_to_filenames[processed_size]:
+                        self.size_to_filenames[processed_size].append(final_name)
 
         return final_name
 

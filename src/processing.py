@@ -6,6 +6,7 @@ import html as html_lib
 import os
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 
 from bs4 import BeautifulSoup, Tag
@@ -319,16 +320,42 @@ class ChapterLoader:
 
         from tqdm import tqdm
 
-        prepared: List[Dict[str, Any]] = []
-        for i, ch_data in enumerate(tqdm(filtered, desc="⏱️ Загрузка глав", unit="ch", miniters=1, smoothing=0.1)):
-            prepared.append(
-                self._process_single_chapter(ch_data, novel_info, image_folder)
-            )
+        max_workers = self._get_max_workers(len(filtered))
+
+        prepared: List[Optional[Dict[str, Any]]] = [None] * len(filtered)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(
+                    self._process_single_chapter, ch_data, novel_info, image_folder
+                ): i
+                for i, ch_data in enumerate(filtered)
+            }
+            for future in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc="⏱️ Загрузка глав",
+                unit="ch",
+                miniters=1,
+                smoothing=0.1,
+            ):
+                prepared[futures[future]] = future.result()
+
+        result: List[Dict[str, Any]] = [ch for ch in prepared if ch is not None]
 
         with self._cache_lock:
-            self._global_cache[cache_key] = prepared
+            self._global_cache[cache_key] = result
 
-        return prepared
+        return result
+
+    def _get_max_workers(self, chapters_amount: int) -> int:
+        """Определение количества потоков для параллельного скачивания глав."""
+        workers = settings.get("max_parallel_downloads", 4)
+        try:
+            workers = int(workers)
+        except (TypeError, ValueError):
+            workers = 4
+        workers = max(1, min(workers, 16))
+        return min(workers, max(chapters_amount, 1))
 
 
     def _filter_chapters(
