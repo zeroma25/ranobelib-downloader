@@ -225,6 +225,9 @@ class SettingsWidget(QWidget):
             checkbox.stateChanged.connect(self._save_formats)
 
         self.path_edit.textChanged.connect(lambda text: self._save_option("save_directory", text))
+        self.parallel_spinbox.valueChanged.connect(
+            lambda value: self._save_option("max_parallel_downloads", int(value))
+        )
 
     def _save_option(self, key: str, value: Any):
         """Сохранение отдельной настройки"""
@@ -352,5 +355,6 @@ class SettingsWidget(QWidget):
 
         chain.append(self.path_edit)
         chain.append(self.browse_button)
+        chain.append(self.parallel_spinbox)
         chain.append(self.download_button)
         return chain 
